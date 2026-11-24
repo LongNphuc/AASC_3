@@ -1,0 +1,4 @@
+user admin on sanitize-payload #76ff827cc4aa5a20ee3853dbd4a5ce93837d581b5cba0055834bdfe5b328dd26 ~* &* +@all
+user app on sanitize-payload #3580bba97c9b41acabf89f67710f74db7a7183c31ac86e8b8c39af373f0ad4ab ~* &* +@all -@dangerous -@scripting
+user default off sanitize-payload #d748a03c9a6f9904ff35f50c700bc297f265899b96919788e28511466d38289f ~* &* +@all
+user reader on sanitize-payload #3dabe0cc36c18d7cd687886e6b68cb690451b05dd20dbd848fb47871b0f7b6df ~* resetchannels -@all +@read +@connection -@dangerous +acl|whoami

@@ -1,0 +1,28 @@
+######## KẾT QUẢ 09-ansible-python | 2026-11-10 13:48:45 UTC ########
+# Máy: rocky-ctl | Rocky Linux release 9.8 (Blue Onyx) | kernel 5.14.0-687.66.1.el9_8.x86_64 | user rocky
+== 1. Trạng thái trước khi cập nhật
+$ python3.11 --version
+Python 3.11.17
+$ ~/py311-venv/bin/python --version
+Python 3.11.17
+== 2. Lần chạy 1: phát hiện 3.11.17 khác mục tiêu 3.11.18 -> build và cài
+$ grep -E "python3.11 hệ thống|venv ~/py311-venv" logs/run1.txt | sed "s/^ *//"
+"python3.11 hệ thống: 3.11.18 OpenSSL 3.5.8 25 Aug 2026",
+"venv ~/py311-venv: 3.11.18 requests 2.34.2"
+$ python3.11 --version; ~/py311-venv/bin/python --version
+Python 3.11.18
+Python 3.11.18
+== 3. Lần chạy 2: đã đúng phiên bản, không build lại (phải thấy changed=0)
+$ grep -q "changed=0" logs/run2.txt && echo "=> ĐẠT: lần chạy 2 không thay đổi gì"
+=> ĐẠT: lần chạy 2 không thay đổi gì
+== 4. Lần chạy 3: chạy thêm lần nữa, vẫn changed=0
+$ grep -q "changed=0" logs/run3.txt && echo "=> ĐẠT: lần chạy 3 không thay đổi gì"
+=> ĐẠT: lần chạy 3 không thay đổi gì
+== 5. Tổng hợp PLAY RECAP của 3 lần chạy
+$ for f in logs/run1.txt logs/run2.txt logs/run3.txt; do echo "--- $f"; grep -A1 "PLAY RECAP" "$f" | tail -1; done
+--- logs/run1.txt
+localhost                  : ok=15   changed=6    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+--- logs/run2.txt
+localhost                  : ok=8    changed=0    unreachable=0    failed=0    skipped=7    rescued=0    ignored=0   
+--- logs/run3.txt
+localhost                  : ok=8    changed=0    unreachable=0    failed=0    skipped=7    rescued=0    ignored=0   

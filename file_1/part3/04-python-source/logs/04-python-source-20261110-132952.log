@@ -1,0 +1,184 @@
+################################################################
+# Bài      : 04-python-source
+# Thời gian: 2026-11-10 13:29:52 UTC
+# Máy      : rocky-ctl | Rocky Linux release 9.8 (Blue Onyx) | kernel 5.14.0-687.66.1.el9_8.x86_64
+# User     : rocky
+# Log      : logs/04-python-source-20261110-132952.log
+################################################################
+
+================================================================
+== 1. Python đang có trên máy (python3 của hệ thống phải giữ nguyên vì dnf cần nó)
+================================================================
+
+[13:29:53] $ python3 --version; command -v python3; rpm -qf "$(readlink -f /usr/bin/python3)"
+Python 3.9.25
+/usr/bin/python3
+python3-3.9.25-7.el9_8.6.x86_64
+
+[13:29:53] $ ls -l /usr/local/bin/python3.11 2>&1 || true
+ls: cannot access '/usr/local/bin/python3.11': No such file or directory
+
+================================================================
+== 2. Cài công cụ build và thư viện -devel (gdbm-devel nằm ở kho CRB)
+================================================================
+
+[13:29:53] $ sudo dnf -y --enablerepo=crb install gcc make tar openssl-devel bzip2-devel libffi-devel zlib-devel xz-devel sqlite-devel readline-devel ncurses-devel gdbm-devel libuuid-devel tk-devel
+Rocky Linux 9 - CRB                             7.3 kB/s | 4.8 kB     00:00    
+Rocky Linux 9 - CRB                             8.2 MB/s | 6.5 MB     00:00    
+Last metadata expiration check: 0:00:02 ago on Tue 10 Nov 2026 01:29:54 PM UTC.
+Package gcc-11.5.0-14.el9.x86_64 is already installed.
+Package make-1:4.3-8.el9.x86_64 is already installed.
+Package tar-2:1.34-13.el9_8.x86_64 is already installed.
+Package openssl-devel-1:3.5.8-2.el9_8.x86_64 is already installed.
+Package bzip2-devel-1.0.8-11.el9.x86_64 is already installed.
+Package libffi-devel-3.4.2-8.el9.x86_64 is already installed.
+Package zlib-devel-1.2.11-40.el9.x86_64 is already installed.
+Package xz-devel-5.2.5-8.el9_8.1.x86_64 is already installed.
+Package sqlite-devel-3.34.1-11.el9_8.x86_64 is already installed.
+Package readline-devel-8.1-4.el9.x86_64 is already installed.
+Package ncurses-devel-6.2-12.20210508.el9.x86_64 is already installed.
+Package gdbm-devel-1:1.23-1.el9.x86_64 is already installed.
+Package libuuid-devel-2.37.4-25.el9.x86_64 is already installed.
+Package tk-devel-1:8.6.10-9.el9.x86_64 is already installed.
+Dependencies resolved.
+Nothing to do.
+Complete!
+
+================================================================
+== 3. Tải mã nguồn 3.11.17 và kiểm tra SHA-256
+================================================================
+
+[13:29:57] $ mkdir -p /home/rocky/build && (cd /home/rocky/build && curl -fsSLO https://www.python.org/ftp/python/3.11.17/Python-3.11.17.tgz && ls -l Python-3.11.17.tgz)
+-rw-r--r--. 1 rocky rocky 26607139 Nov 10 13:29 Python-3.11.17.tgz
+
+[13:29:58] $ (cd /home/rocky/build && echo '53cdee63ac4bf12387b7b33a53d3b1f8f4941cad73807a7b4fe91bb001ef004a  Python-3.11.17.tgz' | sha256sum -c -)
+Python-3.11.17.tgz: OK
+
+[13:29:58] $ (cd /home/rocky/build && rm -rf Python-3.11.17 && tar xzf Python-3.11.17.tgz)
+
+================================================================
+== 4. configure (build bằng user thường, chỉ bước cài mới cần sudo)
+================================================================
+Không bật --enable-optimizations/--with-lto: PGO chạy cả bộ test để lấy profile, trên máy 2 vCPU mất
+nhiều lần thời gian build thường. Production nên bật (nhanh hơn khoảng 10-20%). Xem README.
+
+[13:29:58] $ (cd /home/rocky/build/Python-3.11.17 && ./configure --prefix=/usr/local > /home/rocky/aasc3/part3/04-python-source/logs/configure.log 2>&1; tail -5 /home/rocky/aasc3/part3/04-python-source/logs/configure.log)
+configure:
+
+If you want a release build with all stable optimizations active (PGO, etc),
+please run ./configure --enable-optimizations
+
+
+================================================================
+== 5. make (toàn bộ output ở logs/make.log)
+================================================================
+
+[13:30:29] $ (cd /home/rocky/build/Python-3.11.17 && time make -j$(nproc) > /home/rocky/aasc3/part3/04-python-source/logs/make.log 2>&1)
+
+real	2m34.909s
+user	4m39.712s
+sys	0m16.119s
+
+[13:33:04] $ grep -A8 -E 'necessary bits to build these optional modules|Failed to build these modules|Could not build the ssl module' logs/make.log || echo 'Không có module nào bị thiếu'
+The necessary bits to build these optional modules were not found:
+nis                                                            
+To find the necessary bits, look in setup.py in detect_modules() for the module's name.
+
+running build_scripts
+creating build/scripts-3.11
+copying and adjusting /home/rocky/build/Python-3.11.17/Tools/scripts/pydoc3 -> build/scripts-3.11
+copying and adjusting /home/rocky/build/Python-3.11.17/Tools/scripts/idle3 -> build/scripts-3.11
+copying and adjusting /home/rocky/build/Python-3.11.17/Tools/scripts/2to3 -> build/scripts-3.11
+
+================================================================
+== 6. make altinstall (cài python3.11, không tạo/ghi đè lệnh python3)
+================================================================
+
+[13:33:04] $ (cd /home/rocky/build/Python-3.11.17 && sudo make altinstall > /home/rocky/aasc3/part3/04-python-source/logs/install.log 2>&1; tail -3 /home/rocky/aasc3/part3/04-python-source/logs/install.log)
+  Consider adding this directory to PATH or, if you prefer to suppress this warning, use --no-warn-script-location.
+Successfully installed pip-24.0 setuptools-79.0.1
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv
+
+[13:33:56] $ ls -l /usr/local/bin/ | grep -E "python3|pip3"
+-rwxr-xr-x. 1 root root      230 Nov 10 13:33 pip3.11
+-rwxr-xr-x. 1 root root 23348400 Nov 10 13:33 python3.11
+-rwxr-xr-x. 1 root root     3013 Nov 10 13:33 python3.11-config
+
+================================================================
+== 7. Kiểm tra phiên bản và các module chuẩn
+================================================================
+
+[13:33:56] $ /usr/local/bin/python3.11 -VV
+Python 3.11.17 (main, Nov 10 2026, 13:32:08) [GCC 11.5.0 20240719 (Red Hat 11.5.0-14)]
+
+[13:33:56] $ command -v python3.11; python3 --version
+/usr/local/bin/python3.11
+Python 3.9.25
+
+[13:33:56] $ python3.11 -c "import ssl, sqlite3, ctypes, lzma, bz2, readline, zlib, uuid, dbm.gnu, curses; print(\"Các module chuẩn OK |\", ssl.OPENSSL_VERSION)"
+Các module chuẩn OK | OpenSSL 3.5.8 25 Aug 2026
+
+================================================================
+== 8. pip và virtualenv, cài requests
+================================================================
+
+[13:33:56] $ python3.11 -m pip --version
+pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)
+
+[13:33:56] $ rm -rf /home/rocky/py311-venv && python3.11 -m venv /home/rocky/py311-venv
+
+[13:34:02] $ /home/rocky/py311-venv/bin/python -m pip install --upgrade pip
+Requirement already satisfied: pip in /home/rocky/py311-venv/lib/python3.11/site-packages (24.0)
+Collecting pip
+  Using cached pip-26.3-py3-none-any.whl.metadata (4.6 kB)
+Using cached pip-26.3-py3-none-any.whl (2.0 MB)
+Installing collected packages: pip
+  Attempting uninstall: pip
+    Found existing installation: pip 24.0
+    Uninstalling pip-24.0:
+      Successfully uninstalled pip-24.0
+Successfully installed pip-26.3
+
+[13:34:04] $ /home/rocky/py311-venv/bin/python -m pip install requests
+Collecting requests
+  Using cached requests-2.34.2-py3-none-any.whl.metadata (4.8 kB)
+Collecting charset_normalizer<4,>=2 (from requests)
+  Using cached charset_normalizer-3.5.2-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (46 kB)
+Collecting idna<4,>=2.5 (from requests)
+  Using cached idna-3.20-py3-none-any.whl.metadata (7.2 kB)
+Collecting urllib3<3,>=1.26 (from requests)
+  Using cached urllib3-2.8.0-py3-none-any.whl.metadata (7.4 kB)
+Collecting certifi>=2023.5.7 (from requests)
+  Using cached certifi-2026.10.23-py3-none-any.whl.metadata (2.5 kB)
+Using cached requests-2.34.2-py3-none-any.whl (73 kB)
+Using cached charset_normalizer-3.5.2-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (269 kB)
+Using cached idna-3.20-py3-none-any.whl (69 kB)
+Using cached urllib3-2.8.0-py3-none-any.whl (135 kB)
+Using cached certifi-2026.10.23-py3-none-any.whl (135 kB)
+Installing collected packages: urllib3, idna, charset_normalizer, certifi, requests
+
+Successfully installed certifi-2026.10.23 charset_normalizer-3.5.2 idna-3.20 requests-2.34.2 urllib3-2.8.0
+
+[13:34:05] $ /home/rocky/py311-venv/bin/python --version && /home/rocky/py311-venv/bin/pip --version
+Python 3.11.17
+pip 26.3 from /home/rocky/py311-venv/lib/python3.11/site-packages/pip (python 3.11)
+
+[13:34:05] $ /home/rocky/py311-venv/bin/pip list
+Package            Version
+------------------ ----------
+certifi            2026.10.23
+charset-normalizer 3.5.2
+idna               3.20
+pip                26.3
+requests           2.34.2
+setuptools         79.0.1
+urllib3            2.8.0
+
+[13:34:05] $ /home/rocky/py311-venv/bin/pip list > logs/pip-list.txt
+
+[13:34:06] $ /home/rocky/py311-venv/bin/python -c 'import requests, sys; r = requests.get("https://www.python.org", timeout=10); print(sys.version.split()[0], "| requests", requests.__version__, "| python.org ->", r.status_code)'
+3.11.17 | requests 2.34.2 | python.org -> 200
+
+================================================================
+== XONG Bài 4
+================================================================

@@ -1,0 +1,4 @@
+user default off
+user admin on #acc6404681b4899efec2d42a680a1bb218625dd954e5d8c641b5f2bed7b3e81f ~* &* +@all
+user app on #0fffa89dc01e2cdeb7e13a5f2afe23edb796b544bdce6fa19502854deb55d99d ~* &* +@all -@dangerous -@scripting
+user reader on #7adfd946dfd44ad27575f61984904463094faa5ae10b7b68016d764e50dbb4e5 ~* resetchannels -@all +@read +@connection -@dangerous +acl|whoami

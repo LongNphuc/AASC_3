@@ -1,0 +1,5 @@
+---
+# Collection ngoài ansible.builtin mà các playbook dùng (ansible.posix.sysctl, callback profile_tasks)
+collections:
+  - name: ansible.posix
+    version: ">=2.2.0,<3.0.0"

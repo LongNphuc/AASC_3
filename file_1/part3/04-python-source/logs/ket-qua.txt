@@ -1,0 +1,47 @@
+######## KẾT QUẢ 04-python-source | 2026-11-10 13:29:52 UTC ########
+# Máy: rocky-ctl | Rocky Linux release 9.8 (Blue Onyx) | kernel 5.14.0-687.66.1.el9_8.x86_64 | user rocky
+== 3. Tải mã nguồn 3.11.17 và kiểm tra SHA-256
+$ (cd /home/rocky/build && echo '53cdee63ac4bf12387b7b33a53d3b1f8f4941cad73807a7b4fe91bb001ef004a  Python-3.11.17.tgz' | sha256sum -c -)
+Python-3.11.17.tgz: OK
+== 5. make (toàn bộ output ở logs/make.log)
+$ (cd /home/rocky/build/Python-3.11.17 && time make -j$(nproc) > /home/rocky/aasc3/part3/04-python-source/logs/make.log 2>&1)
+
+real	2m34.909s
+user	4m39.712s
+sys	0m16.119s
+$ grep -A8 -E 'necessary bits to build these optional modules|Failed to build these modules|Could not build the ssl module' logs/make.log || echo 'Không có module nào bị thiếu'
+The necessary bits to build these optional modules were not found:
+nis                                                            
+To find the necessary bits, look in setup.py in detect_modules() for the module's name.
+
+running build_scripts
+creating build/scripts-3.11
+copying and adjusting /home/rocky/build/Python-3.11.17/Tools/scripts/pydoc3 -> build/scripts-3.11
+copying and adjusting /home/rocky/build/Python-3.11.17/Tools/scripts/idle3 -> build/scripts-3.11
+copying and adjusting /home/rocky/build/Python-3.11.17/Tools/scripts/2to3 -> build/scripts-3.11
+== 6. make altinstall (cài python3.11, không tạo/ghi đè lệnh python3)
+$ ls -l /usr/local/bin/ | grep -E "python3|pip3"
+-rwxr-xr-x. 1 root root      230 Nov 10 13:33 pip3.11
+-rwxr-xr-x. 1 root root 23348400 Nov 10 13:33 python3.11
+-rwxr-xr-x. 1 root root     3013 Nov 10 13:33 python3.11-config
+== 7. Kiểm tra phiên bản và các module chuẩn
+$ /usr/local/bin/python3.11 -VV
+Python 3.11.17 (main, Nov 10 2026, 13:32:08) [GCC 11.5.0 20240719 (Red Hat 11.5.0-14)]
+$ command -v python3.11; python3 --version
+/usr/local/bin/python3.11
+Python 3.9.25
+$ python3.11 -c "import ssl, sqlite3, ctypes, lzma, bz2, readline, zlib, uuid, dbm.gnu, curses; print(\"Các module chuẩn OK |\", ssl.OPENSSL_VERSION)"
+Các module chuẩn OK | OpenSSL 3.5.8 25 Aug 2026
+== 8. pip và virtualenv, cài requests
+$ /home/rocky/py311-venv/bin/pip list
+Package            Version
+------------------ ----------
+certifi            2026.10.23
+charset-normalizer 3.5.2
+idna               3.20
+pip                26.3
+requests           2.34.2
+setuptools         79.0.1
+urllib3            2.8.0
+$ /home/rocky/py311-venv/bin/python -c 'import requests, sys; r = requests.get("https://www.python.org", timeout=10); print(sys.version.split()[0], "| requests", requests.__version__, "| python.org ->", r.status_code)'
+3.11.17 | requests 2.34.2 | python.org -> 200

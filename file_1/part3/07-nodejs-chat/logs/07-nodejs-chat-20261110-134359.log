@@ -1,0 +1,229 @@
+################################################################
+# Bài      : 07-nodejs-chat
+# Thời gian: 2026-11-10 13:43:59 UTC
+# Máy      : rocky-ctl | Rocky Linux release 9.8 (Blue Onyx) | kernel 5.14.0-687.66.1.el9_8.x86_64
+# User     : rocky
+# Log      : logs/07-nodejs-chat-20261110-134359.log
+################################################################
+
+================================================================
+== 1. Cài Node.js 20 (module nodejs:20 của AppStream)
+================================================================
+
+[13:43:59] $ sudo dnf -y module list nodejs
+Last metadata expiration check: 0:39:08 ago on Tue 10 Nov 2026 01:04:52 PM UTC.
+Rocky Linux 9 - AppStream
+Name   Stream Profiles                              Summary           
+nodejs 18     common [d], development, minimal, s2i Javascript runtime
+nodejs 20     common [d], development, minimal, s2i Javascript runtime
+nodejs 22     common [d], development, minimal, s2i Javascript runtime
+nodejs 24     common [d], development, minimal, s2i Javascript runtime
+
+Hint: [d]efault, [e]nabled, [x]disabled, [i]nstalled
+
+[13:44:00] $ sudo dnf -y module reset nodejs
+Last metadata expiration check: 0:39:09 ago on Tue 10 Nov 2026 01:04:52 PM UTC.
+Dependencies resolved.
+Nothing to do.
+Complete!
+
+[13:44:02] $ sudo dnf -y module enable nodejs:20
+Last metadata expiration check: 0:39:11 ago on Tue 10 Nov 2026 01:04:52 PM UTC.
+Dependencies resolved.
+================================================================================
+ Package           Architecture     Version             Repository         Size
+================================================================================
+Enabling module streams:
+ nodejs                             20                                         
+
+Transaction Summary
+================================================================================
+
+Complete!
+
+[13:44:03] $ sudo dnf -y install nodejs npm
+Last metadata expiration check: 0:39:11 ago on Tue 10 Nov 2026 01:04:52 PM UTC.
+Dependencies resolved.
+===============================================================================================
+ Package            Arch    Version                                            Repo        Size
+===============================================================================================
+Installing:
+ nodejs             x86_64  1:20.20.2-1.module+el9.7.0+40153+4d595597          appstream   14 M
+ npm                x86_64  1:10.8.2-1.20.20.2.1.module+el9.7.0+40153+4d595597 appstream  1.8 M
+Installing weak dependencies:
+ nodejs-docs        noarch  1:20.20.2-1.module+el9.7.0+40153+4d595597          appstream  8.5 M
+ nodejs-full-i18n   x86_64  1:20.20.2-1.module+el9.7.0+40153+4d595597          appstream  8.9 M
+
+Transaction Summary
+===============================================================================================
+Install  4 Packages
+
+Total download size: 33 M
+Installed size: 181 M
+Downloading Packages:
+(1/4): nodejs-docs-20.20.2-1.module+el9.7.0+401  26 MB/s | 8.5 MB     00:00    
+(2/4): nodejs-full-i18n-20.20.2-1.module+el9.7.  24 MB/s | 8.9 MB     00:00    
+(3/4): nodejs-20.20.2-1.module+el9.7.0+40153+4d  32 MB/s |  14 MB     00:00    
+(4/4): npm-10.8.2-1.20.20.2.1.module+el9.7.0+40  15 MB/s | 1.8 MB     00:00    
+--------------------------------------------------------------------------------
+Total                                            34 MB/s |  33 MB     00:00     
+Running transaction check
+Transaction check succeeded.
+Running transaction test
+Transaction test succeeded.
+Running transaction
+  Preparing        :                                                        1/1 
+  Installing       : nodejs-docs-1:20.20.2-1.module+el9.7.0+40153+4d59559   1/4 
+  Installing       : nodejs-full-i18n-1:20.20.2-1.module+el9.7.0+40153+4d   2/4 
+  Installing       : npm-1:10.8.2-1.20.20.2.1.module+el9.7.0+40153+4d5955   3/4 
+  Installing       : nodejs-1:20.20.2-1.module+el9.7.0+40153+4d595597.x86   4/4 
+  Running scriptlet: nodejs-1:20.20.2-1.module+el9.7.0+40153+4d595597.x86   4/4 
+  Verifying        : nodejs-1:20.20.2-1.module+el9.7.0+40153+4d595597.x86   1/4 
+  Verifying        : nodejs-docs-1:20.20.2-1.module+el9.7.0+40153+4d59559   2/4 
+  Verifying        : nodejs-full-i18n-1:20.20.2-1.module+el9.7.0+40153+4d   3/4 
+  Verifying        : npm-1:10.8.2-1.20.20.2.1.module+el9.7.0+40153+4d5955   4/4 
+
+Installed:
+  nodejs-1:20.20.2-1.module+el9.7.0+40153+4d595597.x86_64                       
+  nodejs-docs-1:20.20.2-1.module+el9.7.0+40153+4d595597.noarch                  
+  nodejs-full-i18n-1:20.20.2-1.module+el9.7.0+40153+4d595597.x86_64             
+  npm-1:10.8.2-1.20.20.2.1.module+el9.7.0+40153+4d595597.x86_64                 
+
+Complete!
+
+[13:44:10] $ node --version && npm --version
+v20.20.2
+10.8.2
+Lưu ý: Node.js 20 đã hết hỗ trợ (EOL) từ 30/04/2026. Bài làm dùng 20 theo đúng đề;
+hệ thống thật nên dùng module nodejs:22 hoặc nodejs:24 (cùng cách cài, chỉ đổi số stream).
+
+================================================================
+== 2. Triển khai ứng dụng vào /opt/chat-server, chạy bằng user hệ thống riêng
+================================================================
+
+[13:44:10] $ id chatsrv 2>/dev/null || sudo useradd --system --no-create-home --shell /sbin/nologin chatsrv
+
+[13:44:10] $ sudo mkdir -p /opt/chat-server && sudo cp server.js load-test.js package.json /opt/chat-server/
+
+[13:44:10] $ [ -f package-lock.json ] && sudo cp package-lock.json /opt/chat-server/ || true
+
+[13:44:10] $ (cd /opt/chat-server && if [ -f package-lock.json ]; then sudo npm ci --omit=dev; else sudo npm install --omit=dev; fi)
+
+added 1 package, and audited 2 packages in 576ms
+
+found 0 vulnerabilities
+
+[13:44:11] $ cp /opt/chat-server/package-lock.json logs/package-lock.json
+
+[13:44:11] $ sudo chown -R root:chatsrv /opt/chat-server && ls -l /opt/chat-server
+total 16
+-rw-r--r--. 1 root chatsrv 3383 Nov 10 13:44 load-test.js
+drwxr-xr-x. 3 root chatsrv   42 Nov 10 13:44 node_modules
+-rw-r--r--. 1 root chatsrv  353 Nov 10 13:44 package.json
+-rw-r--r--. 1 root chatsrv  899 Nov 10 13:44 package-lock.json
+-rw-r--r--. 1 root chatsrv 2755 Nov 10 13:44 server.js
+
+================================================================
+== 3. Chạy bằng systemd (LimitNOFILE=65535 để giữ được hàng nghìn kết nối)
+================================================================
+
+[13:44:11] $ cat chat-server.service
+[Unit]
+Description=AASC3 chat server (Node.js WebSocket, Bài 7)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=chatsrv
+Group=chatsrv
+WorkingDirectory=/opt/chat-server
+Environment=NODE_ENV=production PORT=8080 HOST=127.0.0.1
+ExecStart=/usr/bin/node /opt/chat-server/server.js
+Restart=on-failure
+RestartSec=2
+# Mỗi kết nối WebSocket là một file descriptor: nâng giới hạn để phục vụ hàng nghìn kết nối
+LimitNOFILE=65535
+# Giới hạn quyền của tiến trình
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+
+[13:44:11] $ sudo cp chat-server.service /etc/systemd/system/chat-server.service
+
+[13:44:11] $ sudo systemctl daemon-reload
+
+[13:44:11] $ sudo systemctl enable chat-server
+Created symlink /etc/systemd/system/multi-user.target.wants/chat-server.service → /etc/systemd/system/chat-server.service.
+
+[13:44:11] $ sudo systemctl restart chat-server
+
+[13:44:11] $ sleep 1; systemctl status chat-server --no-pager | head -12
+● chat-server.service - AASC3 chat server (Node.js WebSocket, Bài 7)
+     Loaded: loaded (/etc/systemd/system/chat-server.service; enabled; preset: disabled)
+     Active: active (running) since Tue 2026-11-10 13:44:11 UTC; 1s ago
+   Main PID: 20672 (node)
+      Tasks: 7 (limit: 9989)
+     Memory: 10.9M (peak: 11.2M)
+        CPU: 90ms
+     CGroup: /system.slice/chat-server.service
+             └─20672 /usr/bin/node /opt/chat-server/server.js
+
+Nov 10 13:44:11 rocky-ctl systemd[1]: Started AASC3 chat server (Node.js WebSocket, Bài 7).
+Nov 10 13:44:11 rocky-ctl node[20672]: chat-server v20.20.2 pid=20672 lắng nghe ws://127.0.0.1:8080/chat
+
+[13:44:12] $ systemctl is-active chat-server
+active
+
+[13:44:12] $ sudo ss -tlnp | grep 8080
+LISTEN 0      511        127.0.0.1:8080      0.0.0.0:*    users:(("node",pid=20672,fd=18))                        
+
+[13:44:12] $ grep "open files" /proc/$(systemctl show -p MainPID --value chat-server)/limits
+Max open files            65535                65535                files     
+
+[13:44:12] $ curl -s http://127.0.0.1:8080/stats; echo
+{"connections":0,"peak_connections":0,"messages_received":0,"rss_mb":51.1,"event_loop_delay_p99_ms":10.19,"event_loop_delay_max_ms":11.03,"node":"v20.20.2","pid":20672}
+
+================================================================
+== 4. Kiểm thử 1000 kết nối đồng thời
+================================================================
+
+[13:44:12] $ ulimit -n
+1024
+Client kiểm thử mở 1000 socket trong một tiến trình nên nâng giới hạn file của riêng tiến trình đó lên 4096.
+
+[13:44:12] $ (ulimit -n 4096 && cd /opt/chat-server && node load-test.js)
+Kết nối tới ws://127.0.0.1:8080/chat, số client: 1000
+[1] Mở 1000 kết nối đồng thời mất 676 ms
+[2] 1000 ping đồng thời xong sau 154 ms | RTT p50=68.0 ms, p95=85.9 ms, max=92.6 ms
+[3] 10 tin chat -> 10000/10000 lượt phát tới client sau 323 ms; mọi client nhận đủ 10 tin: ĐÚNG
+[4] /stats khi đang có kết nối: {"connections":1000,"peak_connections":1000,"messages_received":1010,"rss_mb":71.5,"event_loop_delay_p99_ms":65.18,"event_loop_delay_max_ms":284.95,"node":"v20.20.2","pid":20672}
+[5] Sau khi đóng: connections=0, peak_connections=1000
+=> ĐẠT: server phục vụ 1000 kết nối đồng thời
+
+================================================================
+== 5. Tài nguyên server: một tiến trình, vài luồng nội bộ của V8/libuv
+================================================================
+
+[13:44:15] $ ps -o pid,nlwp,rss,etime,cmd -p "$(systemctl show -p MainPID --value chat-server)"
+    PID NLWP   RSS     ELAPSED CMD
+  20672    7 78720       00:03 /usr/bin/node /opt/chat-server/server.js
+
+[13:44:15] $ sudo journalctl -u chat-server --no-pager -n 8
+Nov 08 04:40:15 rocky-ctl node[38416]: chat-server v20.20.2 pid=38416 lắng nghe ws://127.0.0.1:8080/chat
+Nov 09 22:49:44 rocky-ctl systemd[1]: Stopping AASC3 chat server (Node.js WebSocket, Bài 7)...
+Nov 09 22:49:44 rocky-ctl node[38416]: Nhận SIGTERM, đóng server
+Nov 09 22:49:44 rocky-ctl systemd[1]: chat-server.service: Deactivated successfully.
+Nov 09 22:49:44 rocky-ctl systemd[1]: Stopped AASC3 chat server (Node.js WebSocket, Bài 7).
+Nov 09 22:49:44 rocky-ctl systemd[1]: chat-server.service: Consumed 9min 56.285s CPU time.
+-- Boot fb195eda02b9465ebe08af1274dc0ffd --
+Nov 10 13:44:11 rocky-ctl systemd[1]: Started AASC3 chat server (Node.js WebSocket, Bài 7).
+Nov 10 13:44:11 rocky-ctl node[20672]: chat-server v20.20.2 pid=20672 lắng nghe ws://127.0.0.1:8080/chat
+
+================================================================
+== XONG Bài 7
+================================================================

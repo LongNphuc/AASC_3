@@ -1,0 +1,416 @@
+################################################################
+# Bài      : 09-ansible-python
+# Thời gian: 2026-11-10 13:48:45 UTC
+# Máy      : rocky-ctl | Rocky Linux release 9.8 (Blue Onyx) | kernel 5.14.0-687.66.1.el9_8.x86_64
+# User     : rocky
+# Log      : logs/09-ansible-python-20261110-134845.log
+################################################################
+
+================================================================
+== 1. Trạng thái trước khi cập nhật
+================================================================
+
+[13:48:45] $ ansible --version | head -1
+ansible [core 2.21.6]
+
+[13:48:45] $ python3.11 --version
+Python 3.11.17
+
+[13:48:45] $ ~/py311-venv/bin/python --version
+Python 3.11.17
+
+[13:48:45] $ cat ../roles/python311/defaults/main.yml
+---
+# Role python311: cài hoặc cập nhật Python 3.11 từ mã nguồn (make altinstall vào /usr/local).
+# Chỉ build khi phiên bản đang cài khác python311_version, nên chạy lại bao nhiêu lần cũng không đổi gì.
+python311_version: "3.11.18"
+# SHA-256 của file .tgz, lấy từ trang python.org/downloads/release/python-311XX/
+python311_sha256:
+  "3.11.17": 53cdee63ac4bf12387b7b33a53d3b1f8f4941cad73807a7b4fe91bb001ef004a
+  "3.11.18": 5f62711b12470fd435f83f1451c1b1ef4a179aebc715c716874b0967567d814e
+python311_prefix: /usr/local
+python311_build_dir: /usr/local/src
+# Production nên thêm --enable-optimizations --with-lto (build lâu hơn nhiều, Python nhanh hơn ~10-20%)
+python311_configure_args: "--prefix={{ python311_prefix }}"
+python311_build_deps:
+  - gcc
+  - make
+  - tar
+  - openssl-devel
+  - bzip2-devel
+  - libffi-devel
+  - zlib-devel
+  - xz-devel
+  - sqlite-devel
+  - readline-devel
+  - ncurses-devel
+  - gdbm-devel
+  - libuuid-devel
+  - tk-devel
+
+[13:48:45] $ cat ../roles/python311/tasks/main.yml
+---
+- name: Đọc phiên bản python3.11 đang cài
+  ansible.builtin.command: "{{ python311_prefix }}/bin/python3.11 -c 'import platform; print(platform.python_version())'"
+  register: python311_current
+  changed_when: false
+  failed_when: false
+
+- name: Ghi nhận phiên bản hiện tại
+  ansible.builtin.set_fact:
+    python311_installed: "{{ python311_current.stdout if python311_current.rc == 0 else 'chưa cài' }}"
+    python311_src: "{{ python311_build_dir }}/Python-{{ python311_version }}"
+
+- name: So sánh với phiên bản mục tiêu
+  ansible.builtin.debug:
+    msg: "python3.11 đang cài: {{ python311_installed }} | mục tiêu: {{ python311_version }} | cần build: {{ python311_installed != python311_version }}"
+
+- name: Build và cài Python {{ python311_version }} (chỉ khi khác phiên bản đang cài)
+  when: python311_installed != python311_version
+  block:
+    - name: Cài công cụ build và thư viện -devel (gdbm-devel ở kho CRB)
+      ansible.builtin.dnf:
+        name: "{{ python311_build_deps }}"
+        enablerepo: crb
+        state: present
+
+    - name: Tải mã nguồn và kiểm tra SHA-256
+      ansible.builtin.get_url:
+        url: "https://www.python.org/ftp/python/{{ python311_version }}/Python-{{ python311_version }}.tgz"
+        dest: "{{ python311_build_dir }}/Python-{{ python311_version }}.tgz"
+        checksum: "sha256:{{ python311_sha256[python311_version] }}"
+        mode: "0644"
+
+    - name: Giải nén mã nguồn
+      ansible.builtin.unarchive:
+        src: "{{ python311_build_dir }}/Python-{{ python311_version }}.tgz"
+        dest: "{{ python311_build_dir }}"
+        remote_src: true
+        creates: "{{ python311_src }}/configure"
+
+    - name: configure
+      ansible.builtin.command:
+        cmd: "./configure {{ python311_configure_args }}"
+        chdir: "{{ python311_src }}"
+        creates: "{{ python311_src }}/Makefile"
+
+    - name: make (chạy nền, kiểm tra mỗi 15 giây, tối đa 1 giờ)
+      ansible.builtin.command:
+        cmd: "make -j{{ ansible_facts['processor_vcpus'] }}"
+        chdir: "{{ python311_src }}"
+        creates: "{{ python311_src }}/python"
+      async: 3600
+      poll: 15
+
+    - name: make altinstall (không ghi đè python3 của hệ thống)
+      ansible.builtin.command:
+        cmd: make altinstall
+        chdir: "{{ python311_src }}"
+      changed_when: true
+
+    - name: Dọn thư mục build
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ python311_src }}"
+        - "{{ python311_src }}.tgz"
+
+- name: Kiểm tra lại phiên bản sau khi chạy role
+  ansible.builtin.command: "{{ python311_prefix }}/bin/python3.11 -c 'import platform, ssl; print(platform.python_version(), ssl.OPENSSL_VERSION)'"
+  register: python311_after
+  changed_when: false
+
+- name: Xác nhận đúng phiên bản mục tiêu
+  ansible.builtin.assert:
+    that: python311_after.stdout.split()[0] == python311_version
+    success_msg: "python3.11 = {{ python311_after.stdout }}"
+    fail_msg: "python3.11 = {{ python311_after.stdout }}, khác mục tiêu {{ python311_version }}"
+
+[13:48:45] $ cat playbook.yaml
+---
+# Bài 9 (Phần 3): cập nhật Python 3.11 trên máy chủ bằng Ansible, đảm bảo idempotent.
+# Máy đang có 3.11.17 (Bài 4) -> playbook đưa lên 3.11.18. Chạy lại lần nữa thì không build lại (changed=0).
+# Đổi phiên bản mục tiêu: ansible-playbook playbook.yaml -e python311_version=3.11.18
+- name: Cập nhật Python 3.11 lên bản bảo trì mới nhất
+  hosts: python_servers
+  become: true
+  roles:
+    - python311
+
+  post_tasks:
+    - name: Virtualenv tạo từ trước (Bài 4) vẫn chạy được với bản vá mới
+      ansible.builtin.command: >-
+        {{ venv_path }}/bin/python -c
+        "import sys, requests; print(sys.version.split()[0], 'requests', requests.__version__)"
+      vars:
+        venv_path: "/home/{{ ansible_facts['env']['SUDO_USER'] | default('rocky') }}/py311-venv"
+      become: false
+      register: venv_check
+      changed_when: false
+      failed_when: false
+
+    - name: Kết quả
+      ansible.builtin.debug:
+        msg:
+          - "python3.11 hệ thống: {{ python311_after.stdout }}"
+          - "venv ~/py311-venv: {{ venv_check.stdout | default('không có venv') }}"
+
+[13:48:45] $ ansible-playbook playbook.yaml --syntax-check
+
+playbook: playbook.yaml
+
+================================================================
+== 2. Lần chạy 1: phát hiện 3.11.17 khác mục tiêu 3.11.18 -> build và cài
+================================================================
+
+[13:48:46] $ ansible-playbook playbook.yaml | tee logs/run1.txt
+
+PLAY [Cập nhật Python 3.11 lên bản bảo trì mới nhất] ***************************
+
+TASK [Gathering Facts] *********************************************************
+Tuesday 10 November 2026  13:48:46 +0000 (0:00:00.016)       0:00:00.016 ****** 
+ok: [localhost]
+
+TASK [python311 : Đọc phiên bản python3.11 đang cài] ***************************
+Tuesday 10 November 2026  13:48:47 +0000 (0:00:01.109)       0:00:01.125 ****** 
+ok: [localhost]
+
+TASK [python311 : Ghi nhận phiên bản hiện tại] *********************************
+Tuesday 10 November 2026  13:48:48 +0000 (0:00:00.437)       0:00:01.563 ****** 
+ok: [localhost]
+
+TASK [python311 : So sánh với phiên bản mục tiêu] ******************************
+Tuesday 10 November 2026  13:48:48 +0000 (0:00:00.025)       0:00:01.589 ****** 
+ok: [localhost] => {
+    "msg": "python3.11 đang cài: 3.11.17 | mục tiêu: 3.11.18 | cần build: True"
+}
+
+TASK [python311 : Cài công cụ build và thư viện -devel (gdbm-devel ở kho CRB)] ***
+Tuesday 10 November 2026  13:48:48 +0000 (0:00:00.027)       0:00:01.616 ****** 
+ok: [localhost]
+
+TASK [python311 : Tải mã nguồn và kiểm tra SHA-256] ****************************
+Tuesday 10 November 2026  13:48:50 +0000 (0:00:01.609)       0:00:03.225 ****** 
+changed: [localhost]
+
+TASK [python311 : Giải nén mã nguồn] *******************************************
+Tuesday 10 November 2026  13:48:50 +0000 (0:00:00.827)       0:00:04.053 ****** 
+changed: [localhost]
+
+TASK [python311 : configure] ***************************************************
+Tuesday 10 November 2026  13:48:55 +0000 (0:00:04.850)       0:00:08.903 ****** 
+changed: [localhost]
+
+TASK [python311 : make (chạy nền, kiểm tra mỗi 15 giây, tối đa 1 giờ)] *********
+Tuesday 10 November 2026  13:49:24 +0000 (0:00:28.840)       0:00:37.743 ****** 
+ASYNC POLL on localhost: jid=j328549108397.32780 started=True finished=False
+ASYNC POLL on localhost: jid=j328549108397.32780 started=True finished=False
+ASYNC POLL on localhost: jid=j328549108397.32780 started=True finished=False
+ASYNC POLL on localhost: jid=j328549108397.32780 started=True finished=False
+ASYNC POLL on localhost: jid=j328549108397.32780 started=True finished=False
+ASYNC POLL on localhost: jid=j328549108397.32780 started=True finished=False
+ASYNC POLL on localhost: jid=j328549108397.32780 started=True finished=False
+ASYNC POLL on localhost: jid=j328549108397.32780 started=True finished=False
+ASYNC POLL on localhost: jid=j328549108397.32780 started=True finished=False
+ASYNC POLL on localhost: jid=j328549108397.32780 started=True finished=False
+ASYNC OK on localhost: jid=j328549108397.32780
+changed: [localhost]
+
+TASK [python311 : make altinstall (không ghi đè python3 của hệ thống)] *********
+Tuesday 10 November 2026  13:52:15 +0000 (0:02:50.827)       0:03:28.571 ****** 
+changed: [localhost]
+
+TASK [python311 : Dọn thư mục build] *******************************************
+Tuesday 10 November 2026  13:53:15 +0000 (0:00:59.803)       0:04:28.374 ****** 
+changed: [localhost] => (item=/usr/local/src/Python-3.11.18)
+changed: [localhost] => (item=/usr/local/src/Python-3.11.18.tgz)
+
+TASK [python311 : Kiểm tra lại phiên bản sau khi chạy role] ********************
+Tuesday 10 November 2026  13:53:16 +0000 (0:00:00.881)       0:04:29.255 ****** 
+ok: [localhost]
+
+TASK [python311 : Xác nhận đúng phiên bản mục tiêu] ****************************
+Tuesday 10 November 2026  13:53:16 +0000 (0:00:00.379)       0:04:29.635 ****** 
+ok: [localhost] => {
+    "changed": false,
+    "msg": "python3.11 = 3.11.18 OpenSSL 3.5.8 25 Aug 2026"
+}
+
+TASK [Virtualenv tạo từ trước (Bài 4) vẫn chạy được với bản vá mới] ************
+Tuesday 10 November 2026  13:53:16 +0000 (0:00:00.034)       0:04:29.670 ****** 
+ok: [localhost]
+
+TASK [Kết quả] *****************************************************************
+Tuesday 10 November 2026  13:53:16 +0000 (0:00:00.495)       0:04:30.165 ****** 
+ok: [localhost] => {
+    "msg": [
+        "python3.11 hệ thống: 3.11.18 OpenSSL 3.5.8 25 Aug 2026",
+        "venv ~/py311-venv: 3.11.18 requests 2.34.2"
+    ]
+}
+
+PLAY RECAP *********************************************************************
+localhost                  : ok=15   changed=6    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+
+
+TASKS RECAP ********************************************************************
+Tuesday 10 November 2026  13:53:17 +0000 (0:00:00.034)       0:04:30.200 ****** 
+=============================================================================== 
+python311 : make (chạy nền, kiểm tra mỗi 15 giây, tối đa 1 giờ) ------- 170.83s
+python311 : make altinstall (không ghi đè python3 của hệ thống) -------- 59.80s
+python311 : configure -------------------------------------------------- 28.84s
+python311 : Giải nén mã nguồn ------------------------------------------- 4.85s
+python311 : Cài công cụ build và thư viện -devel (gdbm-devel ở kho CRB) --- 1.61s
+Gathering Facts --------------------------------------------------------- 1.11s
+python311 : Dọn thư mục build ------------------------------------------- 0.88s
+python311 : Tải mã nguồn và kiểm tra SHA-256 ---------------------------- 0.83s
+Virtualenv tạo từ trước (Bài 4) vẫn chạy được với bản vá mới ------------ 0.50s
+python311 : Đọc phiên bản python3.11 đang cài --------------------------- 0.44s
+python311 : Kiểm tra lại phiên bản sau khi chạy role -------------------- 0.38s
+python311 : Xác nhận đúng phiên bản mục tiêu ---------------------------- 0.03s
+Kết quả ----------------------------------------------------------------- 0.03s
+python311 : So sánh với phiên bản mục tiêu ------------------------------ 0.03s
+python311 : Ghi nhận phiên bản hiện tại --------------------------------- 0.03s
+
+[13:53:17] $ grep -E "python3.11 hệ thống|venv ~/py311-venv" logs/run1.txt | sed "s/^ *//"
+"python3.11 hệ thống: 3.11.18 OpenSSL 3.5.8 25 Aug 2026",
+"venv ~/py311-venv: 3.11.18 requests 2.34.2"
+
+[13:53:17] $ python3.11 --version; ~/py311-venv/bin/python --version
+Python 3.11.18
+Python 3.11.18
+
+================================================================
+== 3. Lần chạy 2: đã đúng phiên bản, không build lại (phải thấy changed=0)
+================================================================
+
+[13:53:17] $ ansible-playbook playbook.yaml | tee logs/run2.txt
+
+PLAY [Cập nhật Python 3.11 lên bản bảo trì mới nhất] ***************************
+
+TASK [Gathering Facts] *********************************************************
+Tuesday 10 November 2026  13:53:17 +0000 (0:00:00.015)       0:00:00.015 ****** 
+ok: [localhost]
+
+TASK [python311 : Đọc phiên bản python3.11 đang cài] ***************************
+Tuesday 10 November 2026  13:53:18 +0000 (0:00:01.126)       0:00:01.142 ****** 
+ok: [localhost]
+
+TASK [python311 : Ghi nhận phiên bản hiện tại] *********************************
+Tuesday 10 November 2026  13:53:19 +0000 (0:00:00.448)       0:00:01.590 ****** 
+ok: [localhost]
+
+TASK [python311 : So sánh với phiên bản mục tiêu] ******************************
+Tuesday 10 November 2026  13:53:19 +0000 (0:00:00.026)       0:00:01.616 ****** 
+ok: [localhost] => {
+    "msg": "python3.11 đang cài: 3.11.18 | mục tiêu: 3.11.18 | cần build: False"
+}
+
+TASK [python311 : Cài công cụ build và thư viện -devel (gdbm-devel ở kho CRB)] ***
+Tuesday 10 November 2026  13:53:19 +0000 (0:00:00.025)       0:00:01.642 ****** 
+skipping: [localhost]
+
+TASK [python311 : Tải mã nguồn và kiểm tra SHA-256] ****************************
+Tuesday 10 November 2026  13:53:19 +0000 (0:00:00.018)       0:00:01.661 ****** 
+skipping: [localhost]
+
+TASK [python311 : Giải nén mã nguồn] *******************************************
+Tuesday 10 November 2026  13:53:19 +0000 (0:00:00.061)       0:00:01.722 ****** 
+skipping: [localhost]
+
+TASK [python311 : configure] ***************************************************
+Tuesday 10 November 2026  13:53:19 +0000 (0:00:00.020)       0:00:01.742 ****** 
+skipping: [localhost]
+
+TASK [python311 : make (chạy nền, kiểm tra mỗi 15 giây, tối đa 1 giờ)] *********
+Tuesday 10 November 2026  13:53:19 +0000 (0:00:00.019)       0:00:01.762 ****** 
+skipping: [localhost]
+
+TASK [python311 : make altinstall (không ghi đè python3 của hệ thống)] *********
+Tuesday 10 November 2026  13:53:19 +0000 (0:00:00.019)       0:00:01.782 ****** 
+skipping: [localhost]
+
+TASK [python311 : Dọn thư mục build] *******************************************
+Tuesday 10 November 2026  13:53:19 +0000 (0:00:00.019)       0:00:01.801 ****** 
+skipping: [localhost] => (item=/usr/local/src/Python-3.11.18) 
+skipping: [localhost] => (item=/usr/local/src/Python-3.11.18.tgz) 
+skipping: [localhost]
+
+TASK [python311 : Kiểm tra lại phiên bản sau khi chạy role] ********************
+Tuesday 10 November 2026  13:53:19 +0000 (0:00:00.029)       0:00:01.831 ****** 
+ok: [localhost]
+
+TASK [python311 : Xác nhận đúng phiên bản mục tiêu] ****************************
+Tuesday 10 November 2026  13:53:19 +0000 (0:00:00.330)       0:00:02.161 ****** 
+ok: [localhost] => {
+    "changed": false,
+    "msg": "python3.11 = 3.11.18 OpenSSL 3.5.8 25 Aug 2026"
+}
+
+TASK [Virtualenv tạo từ trước (Bài 4) vẫn chạy được với bản vá mới] ************
+Tuesday 10 November 2026  13:53:20 +0000 (0:00:00.033)       0:00:02.195 ****** 
+ok: [localhost]
+
+TASK [Kết quả] *****************************************************************
+Tuesday 10 November 2026  13:53:20 +0000 (0:00:00.439)       0:00:02.634 ****** 
+ok: [localhost] => {
+    "msg": [
+        "python3.11 hệ thống: 3.11.18 OpenSSL 3.5.8 25 Aug 2026",
+        "venv ~/py311-venv: 3.11.18 requests 2.34.2"
+    ]
+}
+
+PLAY RECAP *********************************************************************
+localhost                  : ok=8    changed=0    unreachable=0    failed=0    skipped=7    rescued=0    ignored=0   
+
+
+TASKS RECAP ********************************************************************
+Tuesday 10 November 2026  13:53:20 +0000 (0:00:00.033)       0:00:02.667 ****** 
+=============================================================================== 
+Gathering Facts --------------------------------------------------------- 1.13s
+python311 : Đọc phiên bản python3.11 đang cài --------------------------- 0.45s
+Virtualenv tạo từ trước (Bài 4) vẫn chạy được với bản vá mới ------------ 0.44s
+python311 : Kiểm tra lại phiên bản sau khi chạy role -------------------- 0.33s
+python311 : Tải mã nguồn và kiểm tra SHA-256 ---------------------------- 0.06s
+python311 : Xác nhận đúng phiên bản mục tiêu ---------------------------- 0.03s
+Kết quả ----------------------------------------------------------------- 0.03s
+python311 : Dọn thư mục build ------------------------------------------- 0.03s
+python311 : Ghi nhận phiên bản hiện tại --------------------------------- 0.03s
+python311 : So sánh với phiên bản mục tiêu ------------------------------ 0.03s
+python311 : Giải nén mã nguồn ------------------------------------------- 0.02s
+python311 : configure --------------------------------------------------- 0.02s
+python311 : make (chạy nền, kiểm tra mỗi 15 giây, tối đa 1 giờ) --------- 0.02s
+python311 : make altinstall (không ghi đè python3 của hệ thống) --------- 0.02s
+python311 : Cài công cụ build và thư viện -devel (gdbm-devel ở kho CRB) --- 0.02s
+
+[13:53:20] $ grep -q "changed=0" logs/run2.txt && echo "=> ĐẠT: lần chạy 2 không thay đổi gì"
+=> ĐẠT: lần chạy 2 không thay đổi gì
+
+================================================================
+== 4. Lần chạy 3: chạy thêm lần nữa, vẫn changed=0
+================================================================
+
+[13:53:20] $ ansible-playbook playbook.yaml | tee logs/run3.txt | grep -A2 "PLAY RECAP"
+PLAY RECAP *********************************************************************
+localhost                  : ok=8    changed=0    unreachable=0    failed=0    skipped=7    rescued=0    ignored=0   
+
+
+[13:53:23] $ grep -q "changed=0" logs/run3.txt && echo "=> ĐẠT: lần chạy 3 không thay đổi gì"
+=> ĐẠT: lần chạy 3 không thay đổi gì
+
+================================================================
+== 5. Tổng hợp PLAY RECAP của 3 lần chạy
+================================================================
+
+[13:53:23] $ for f in logs/run1.txt logs/run2.txt logs/run3.txt; do echo "--- $f"; grep -A1 "PLAY RECAP" "$f" | tail -1; done
+--- logs/run1.txt
+localhost                  : ok=15   changed=6    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+--- logs/run2.txt
+localhost                  : ok=8    changed=0    unreachable=0    failed=0    skipped=7    rescued=0    ignored=0   
+--- logs/run3.txt
+localhost                  : ok=8    changed=0    unreachable=0    failed=0    skipped=7    rescued=0    ignored=0   
+
+================================================================
+== XONG Bài 9
+================================================================

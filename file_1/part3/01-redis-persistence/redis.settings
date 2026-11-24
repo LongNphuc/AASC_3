@@ -1,0 +1,23 @@
+# Các tham số Bài 1 áp vào /etc/redis/redis.conf (bản gốc của gói được giữ ở redis.conf.orig).
+# run.sh thay __PRIVATE_IP__ bằng IP nội bộ của máy và __PASSWORD__ bằng mật khẩu sinh ngẫu nhiên.
+# Mỗi dòng: <tham số> <giá trị>. Dòng bắt đầu bằng # là chú thích.
+
+# --- Bảo mật mạng và xác thực ---
+# Chỉ nghe trên loopback và IP nội bộ, không bao giờ nghe trên IP public
+bind 127.0.0.1 -::1 __PRIVATE_IP__
+protected-mode yes
+port 6379
+requirepass __PASSWORD__
+
+# --- RDB: snapshot sau 300 giây nếu có >= 10 thay đổi, hoặc sau 60 giây nếu có >= 1000 thay đổi ---
+save 300 10 60 1000
+dbfilename dump.rdb
+rdbcompression yes
+rdbchecksum yes
+
+# --- AOF: ghi log mọi lệnh ghi, fsync mỗi giây ---
+appendonly yes
+appendfilename "appendonly.aof"
+appenddirname "appendonlydir"
+appendfsync everysec
+aof-use-rdb-preamble yes

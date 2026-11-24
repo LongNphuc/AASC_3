@@ -1,0 +1,271 @@
+
+PLAY [Redis 7.2 trên rocky-ctl] ************************************************
+
+TASK [Gathering Facts] *********************************************************
+Tuesday 10 November 2026  13:59:08 +0000 (0:00:00.015)       0:00:00.015 ****** 
+ok: [rocky-ctl]
+
+TASK [redis : Kiểm tra đã khai báo user ACL] ***********************************
+Tuesday 10 November 2026  13:59:09 +0000 (0:00:01.114)       0:00:01.130 ****** 
+ok: [rocky-ctl]
+
+TASK [redis : Bật module stream redis:7 và cài Redis 7.2] **********************
+Tuesday 10 November 2026  13:59:09 +0000 (0:00:00.040)       0:00:01.171 ****** 
+ok: [rocky-ctl]
+
+TASK [redis : Tinh chỉnh kernel - unit systemd tắt Transparent Huge Pages] *****
+Tuesday 10 November 2026  13:59:10 +0000 (0:00:01.522)       0:00:02.693 ****** 
+ok: [rocky-ctl]
+
+TASK [redis : Tinh chỉnh kernel - bật và chạy unit tắt THP] ********************
+Tuesday 10 November 2026  13:59:11 +0000 (0:00:00.814)       0:00:03.508 ****** 
+ok: [rocky-ctl]
+
+TASK [redis : Tinh chỉnh kernel - vm.overcommit_memory = 1 (fork khi ghi RDB/AOF không bị lỗi)] ***
+Tuesday 10 November 2026  13:59:12 +0000 (0:00:00.965)       0:00:04.473 ****** 
+ok: [rocky-ctl]
+
+TASK [redis : Sinh redis.conf từ template] *************************************
+Tuesday 10 November 2026  13:59:13 +0000 (0:00:00.424)       0:00:04.898 ****** 
+ok: [rocky-ctl]
+
+TASK [redis : Sinh file ACL (chỉ chứa mã băm SHA-256 của mật khẩu)] ************
+Tuesday 10 November 2026  13:59:13 +0000 (0:00:00.594)       0:00:05.492 ****** 
+changed: [rocky-ctl]
+
+TASK [redis : Bật Redis khi khởi động và đảm bảo đang chạy] ********************
+Tuesday 10 November 2026  13:59:14 +0000 (0:00:00.733)       0:00:06.226 ****** 
+ok: [rocky-ctl]
+
+TASK [redis : Áp dụng các thay đổi đang chờ (restart Redis nếu cấu hình đổi)] ***
+Tuesday 10 November 2026  13:59:14 +0000 (0:00:00.450)       0:00:06.677 ****** 
+
+RUNNING HANDLER [redis : Restart redis] ****************************************
+Tuesday 10 November 2026  13:59:14 +0000 (0:00:00.004)       0:00:06.682 ****** 
+changed: [rocky-ctl]
+
+TASK [redis : Chờ Redis mở cổng 6379] ******************************************
+Tuesday 10 November 2026  13:59:15 +0000 (0:00:00.550)       0:00:07.232 ****** 
+ok: [rocky-ctl]
+
+PLAY [Node.js 20 và push-server trên các node] *********************************
+
+TASK [Gathering Facts] *********************************************************
+Tuesday 10 November 2026  13:59:15 +0000 (0:00:00.425)       0:00:07.658 ****** 
+ok: [rocky-node1]
+
+TASK [Đặt hostname theo tên trong inventory (máy tạo từ image rocky9-base mang sẵn tên cũ)] ***
+Tuesday 10 November 2026  13:59:16 +0000 (0:00:00.848)       0:00:08.507 ****** 
+ok: [rocky-node1]
+
+TASK [nodejs : Cài Node.js 20 và npm từ AppStream (module nodejs:20)] **********
+Tuesday 10 November 2026  13:59:17 +0000 (0:00:00.781)       0:00:09.288 ****** 
+changed: [rocky-node1]
+
+TASK [nodejs : Đọc phiên bản Node.js] ******************************************
+Tuesday 10 November 2026  13:59:25 +0000 (0:00:07.544)       0:00:16.833 ****** 
+ok: [rocky-node1]
+
+TASK [nodejs : Phiên bản Node.js] **********************************************
+Tuesday 10 November 2026  13:59:25 +0000 (0:00:00.427)       0:00:17.260 ****** 
+ok: [rocky-node1] => {
+    "msg": "rocky-node1: node v20.20.2"
+}
+
+TASK [push_server : User hệ thống chạy push-server] ****************************
+Tuesday 10 November 2026  13:59:25 +0000 (0:00:00.028)       0:00:17.289 ****** 
+changed: [rocky-node1]
+
+TASK [push_server : Thư mục ứng dụng] ******************************************
+Tuesday 10 November 2026  13:59:26 +0000 (0:00:00.567)       0:00:17.857 ****** 
+changed: [rocky-node1]
+
+TASK [push_server : Chép mã nguồn và khai báo thư viện] ************************
+Tuesday 10 November 2026  13:59:26 +0000 (0:00:00.296)       0:00:18.154 ****** 
+changed: [rocky-node1] => (item=push-server.js)
+changed: [rocky-node1] => (item=package.json)
+changed: [rocky-node1] => (item=package-lock.json)
+
+TASK [push_server : Kiểm tra đã có node_modules chưa] **************************
+Tuesday 10 November 2026  13:59:28 +0000 (0:00:02.168)       0:00:20.322 ****** 
+ok: [rocky-node1]
+
+TASK [push_server : Cài thư viện bằng npm ci (chỉ khi mã nguồn đổi hoặc chưa có node_modules)] ***
+Tuesday 10 November 2026  13:59:28 +0000 (0:00:00.288)       0:00:20.611 ****** 
+changed: [rocky-node1]
+
+TASK [push_server : File biến môi trường (khóa bí mật, chỉ root và pushsrv đọc được)] ***
+Tuesday 10 November 2026  13:59:30 +0000 (0:00:01.723)       0:00:22.334 ****** 
+changed: [rocky-node1]
+
+TASK [push_server : Unit systemd dạng template (push-server@sub, push-server@pub)] ***
+Tuesday 10 November 2026  13:59:31 +0000 (0:00:00.778)       0:00:23.113 ****** 
+changed: [rocky-node1]
+
+TASK [push_server : Bật và chạy tiến trình sub và pub] *************************
+Tuesday 10 November 2026  13:59:32 +0000 (0:00:00.745)       0:00:23.859 ****** 
+changed: [rocky-node1] => (item=sub)
+changed: [rocky-node1] => (item=pub)
+
+TASK [push_server : Áp dụng các thay đổi đang chờ (restart nếu mã nguồn hoặc cấu hình đổi)] ***
+Tuesday 10 November 2026  13:59:34 +0000 (0:00:02.130)       0:00:25.989 ****** 
+
+RUNNING HANDLER [push_server : Restart push-server] ****************************
+Tuesday 10 November 2026  13:59:34 +0000 (0:00:00.003)       0:00:25.992 ****** 
+changed: [rocky-node1] => (item=sub)
+changed: [rocky-node1] => (item=pub)
+
+TASK [push_server : Chờ cổng sub 8010 và pub 9010 mở] **************************
+Tuesday 10 November 2026  13:59:36 +0000 (0:00:01.793)       0:00:27.786 ****** 
+ok: [rocky-node1] => (item=8010)
+ok: [rocky-node1] => (item=9010)
+
+PLAY [Node.js 20 và push-server trên các node] *********************************
+
+TASK [Gathering Facts] *********************************************************
+Tuesday 10 November 2026  13:59:36 +0000 (0:00:00.757)       0:00:28.543 ****** 
+ok: [rocky-node2]
+
+TASK [Đặt hostname theo tên trong inventory (máy tạo từ image rocky9-base mang sẵn tên cũ)] ***
+Tuesday 10 November 2026  13:59:37 +0000 (0:00:00.846)       0:00:29.390 ****** 
+ok: [rocky-node2]
+
+TASK [nodejs : Cài Node.js 20 và npm từ AppStream (module nodejs:20)] **********
+Tuesday 10 November 2026  13:59:38 +0000 (0:00:00.525)       0:00:29.916 ****** 
+changed: [rocky-node2]
+
+TASK [nodejs : Đọc phiên bản Node.js] ******************************************
+Tuesday 10 November 2026  13:59:44 +0000 (0:00:06.811)       0:00:36.728 ****** 
+ok: [rocky-node2]
+
+TASK [nodejs : Phiên bản Node.js] **********************************************
+Tuesday 10 November 2026  13:59:45 +0000 (0:00:00.320)       0:00:37.048 ****** 
+ok: [rocky-node2] => {
+    "msg": "rocky-node2: node v20.20.2"
+}
+
+TASK [push_server : User hệ thống chạy push-server] ****************************
+Tuesday 10 November 2026  13:59:45 +0000 (0:00:00.027)       0:00:37.076 ****** 
+changed: [rocky-node2]
+
+TASK [push_server : Thư mục ứng dụng] ******************************************
+Tuesday 10 November 2026  13:59:45 +0000 (0:00:00.396)       0:00:37.472 ****** 
+changed: [rocky-node2]
+
+TASK [push_server : Chép mã nguồn và khai báo thư viện] ************************
+Tuesday 10 November 2026  13:59:46 +0000 (0:00:00.299)       0:00:37.772 ****** 
+changed: [rocky-node2] => (item=push-server.js)
+changed: [rocky-node2] => (item=package.json)
+changed: [rocky-node2] => (item=package-lock.json)
+
+TASK [push_server : Kiểm tra đã có node_modules chưa] **************************
+Tuesday 10 November 2026  13:59:48 +0000 (0:00:02.141)       0:00:39.914 ****** 
+ok: [rocky-node2]
+
+TASK [push_server : Cài thư viện bằng npm ci (chỉ khi mã nguồn đổi hoặc chưa có node_modules)] ***
+Tuesday 10 November 2026  13:59:48 +0000 (0:00:00.288)       0:00:40.202 ****** 
+changed: [rocky-node2]
+
+TASK [push_server : File biến môi trường (khóa bí mật, chỉ root và pushsrv đọc được)] ***
+Tuesday 10 November 2026  13:59:50 +0000 (0:00:01.745)       0:00:41.948 ****** 
+changed: [rocky-node2]
+
+TASK [push_server : Unit systemd dạng template (push-server@sub, push-server@pub)] ***
+Tuesday 10 November 2026  13:59:50 +0000 (0:00:00.755)       0:00:42.704 ****** 
+changed: [rocky-node2]
+
+TASK [push_server : Bật và chạy tiến trình sub và pub] *************************
+Tuesday 10 November 2026  13:59:51 +0000 (0:00:00.741)       0:00:43.445 ****** 
+changed: [rocky-node2] => (item=sub)
+changed: [rocky-node2] => (item=pub)
+
+TASK [push_server : Áp dụng các thay đổi đang chờ (restart nếu mã nguồn hoặc cấu hình đổi)] ***
+Tuesday 10 November 2026  13:59:53 +0000 (0:00:02.121)       0:00:45.567 ****** 
+
+RUNNING HANDLER [push_server : Restart push-server] ****************************
+Tuesday 10 November 2026  13:59:53 +0000 (0:00:00.003)       0:00:45.570 ****** 
+changed: [rocky-node2] => (item=sub)
+changed: [rocky-node2] => (item=pub)
+
+TASK [push_server : Chờ cổng sub 8010 và pub 9010 mở] **************************
+Tuesday 10 November 2026  13:59:55 +0000 (0:00:01.813)       0:00:47.384 ****** 
+ok: [rocky-node2] => (item=8010)
+ok: [rocky-node2] => (item=9010)
+
+PLAY [Kiểm tra từng push-server từ control node] *******************************
+
+TASK [Gọi /server-stat của tiến trình sub (8010) và pub (9010)] ****************
+Tuesday 10 November 2026  13:59:56 +0000 (0:00:00.751)       0:00:48.136 ****** 
+ok: [rocky-node1 -> rocky-ctl] => (item=8010)
+ok: [rocky-node2 -> rocky-ctl] => (item=8010)
+ok: [rocky-node1 -> rocky-ctl] => (item=9010)
+ok: [rocky-node2 -> rocky-ctl] => (item=9010)
+
+TASK [Kết quả] *****************************************************************
+Tuesday 10 November 2026  13:59:57 +0000 (0:00:01.296)       0:00:49.432 ****** 
+ok: [rocky-node1] => {
+    "msg": [
+        {
+            "channels": {},
+            "connections": 0,
+            "delivered": 0,
+            "node": "rocky-node1",
+            "role": "sub",
+            "rss_mb": 55
+        },
+        {
+            "node": "rocky-node1",
+            "published": 0,
+            "rejected": 0,
+            "role": "pub"
+        }
+    ]
+}
+ok: [rocky-node2] => {
+    "msg": [
+        {
+            "channels": {},
+            "connections": 0,
+            "delivered": 0,
+            "node": "rocky-node2",
+            "role": "sub",
+            "rss_mb": 71
+        },
+        {
+            "node": "rocky-node2",
+            "published": 0,
+            "rejected": 0,
+            "role": "pub"
+        }
+    ]
+}
+
+PLAY RECAP *********************************************************************
+rocky-ctl                  : ok=11   changed=2    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+rocky-node1                : ok=17   changed=9    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+rocky-node2                : ok=17   changed=9    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+
+
+TASKS RECAP ********************************************************************
+Tuesday 10 November 2026  13:59:57 +0000 (0:00:00.056)       0:00:49.488 ****** 
+=============================================================================== 
+nodejs : Cài Node.js 20 và npm từ AppStream (module nodejs:20) --------- 14.36s
+push_server : Chép mã nguồn và khai báo thư viện ------------------------ 4.31s
+push_server : Bật và chạy tiến trình sub và pub ------------------------- 4.25s
+push_server : Restart push-server --------------------------------------- 3.61s
+push_server : Cài thư viện bằng npm ci (chỉ khi mã nguồn đổi hoặc chưa có node_modules) --- 3.47s
+push_server : File biến môi trường (khóa bí mật, chỉ root và pushsrv đọc được) --- 1.53s
+redis : Bật module stream redis:7 và cài Redis 7.2 ---------------------- 1.52s
+push_server : Chờ cổng sub 8010 và pub 9010 mở -------------------------- 1.51s
+push_server : Unit systemd dạng template (push-server@sub, push-server@pub) --- 1.49s
+Đặt hostname theo tên trong inventory (máy tạo từ image rocky9-base mang sẵn tên cũ) --- 1.31s
+Gọi /server-stat của tiến trình sub (8010) và pub (9010) ---------------- 1.30s
+Gathering Facts --------------------------------------------------------- 1.11s
+redis : Tinh chỉnh kernel - bật và chạy unit tắt THP -------------------- 0.97s
+push_server : User hệ thống chạy push-server ---------------------------- 0.96s
+Gathering Facts --------------------------------------------------------- 0.85s
+Gathering Facts --------------------------------------------------------- 0.85s
+redis : Tinh chỉnh kernel - unit systemd tắt Transparent Huge Pages ----- 0.81s
+nodejs : Đọc phiên bản Node.js ------------------------------------------ 0.75s
+redis : Sinh file ACL (chỉ chứa mã băm SHA-256 của mật khẩu) ------------ 0.73s
+push_server : Thư mục ứng dụng ------------------------------------------ 0.60s

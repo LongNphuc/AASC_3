@@ -1,0 +1,77 @@
+---
+- name: Đọc phiên bản python3.11 đang cài
+  ansible.builtin.command: "{{ python311_prefix }}/bin/python3.11 -c 'import platform; print(platform.python_version())'"
+  register: python311_current
+  changed_when: false
+  failed_when: false
+
+- name: Ghi nhận phiên bản hiện tại
+  ansible.builtin.set_fact:
+    python311_installed: "{{ python311_current.stdout if python311_current.rc == 0 else 'chưa cài' }}"
+    python311_src: "{{ python311_build_dir }}/Python-{{ python311_version }}"
+
+- name: So sánh với phiên bản mục tiêu
+  ansible.builtin.debug:
+    msg: "python3.11 đang cài: {{ python311_installed }} | mục tiêu: {{ python311_version }} | cần build: {{ python311_installed != python311_version }}"
+
+- name: Build và cài Python {{ python311_version }} (chỉ khi khác phiên bản đang cài)
+  when: python311_installed != python311_version
+  block:
+    - name: Cài công cụ build và thư viện -devel (gdbm-devel ở kho CRB)
+      ansible.builtin.dnf:
+        name: "{{ python311_build_deps }}"
+        enablerepo: crb
+        state: present
+
+    - name: Tải mã nguồn và kiểm tra SHA-256
+      ansible.builtin.get_url:
+        url: "https://www.python.org/ftp/python/{{ python311_version }}/Python-{{ python311_version }}.tgz"
+        dest: "{{ python311_build_dir }}/Python-{{ python311_version }}.tgz"
+        checksum: "sha256:{{ python311_sha256[python311_version] }}"
+        mode: "0644"
+
+    - name: Giải nén mã nguồn
+      ansible.builtin.unarchive:
+        src: "{{ python311_build_dir }}/Python-{{ python311_version }}.tgz"
+        dest: "{{ python311_build_dir }}"
+        remote_src: true
+        creates: "{{ python311_src }}/configure"
+
+    - name: configure
+      ansible.builtin.command:
+        cmd: "./configure {{ python311_configure_args }}"
+        chdir: "{{ python311_src }}"
+        creates: "{{ python311_src }}/Makefile"
+
+    - name: make (chạy nền, kiểm tra mỗi 15 giây, tối đa 1 giờ)
+      ansible.builtin.command:
+        cmd: "make -j{{ ansible_facts['processor_vcpus'] }}"
+        chdir: "{{ python311_src }}"
+        creates: "{{ python311_src }}/python"
+      async: 3600
+      poll: 15
+
+    - name: make altinstall (không ghi đè python3 của hệ thống)
+      ansible.builtin.command:
+        cmd: make altinstall
+        chdir: "{{ python311_src }}"
+      changed_when: true
+
+    - name: Dọn thư mục build
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ python311_src }}"
+        - "{{ python311_src }}.tgz"
+
+- name: Kiểm tra lại phiên bản sau khi chạy role
+  ansible.builtin.command: "{{ python311_prefix }}/bin/python3.11 -c 'import platform, ssl; print(platform.python_version(), ssl.OPENSSL_VERSION)'"
+  register: python311_after
+  changed_when: false
+
+- name: Xác nhận đúng phiên bản mục tiêu
+  ansible.builtin.assert:
+    that: python311_after.stdout.split()[0] == python311_version
+    success_msg: "python3.11 = {{ python311_after.stdout }}"
+    fail_msg: "python3.11 = {{ python311_after.stdout }}, khác mục tiêu {{ python311_version }}"

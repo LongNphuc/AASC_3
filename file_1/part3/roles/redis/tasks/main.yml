@@ -1,0 +1,68 @@
+---
+- name: Kiểm tra đã khai báo user ACL
+  ansible.builtin.assert:
+    that: redis_acl_users | length > 0
+    fail_msg: "Cần truyền redis_acl_users (ít nhất một user quản trị)"
+    quiet: true
+
+- name: Bật module stream redis:{{ redis_module_stream }} và cài Redis 7.2
+  ansible.builtin.dnf:
+    name: "@redis:{{ redis_module_stream }}/common"
+    state: present
+
+- name: Tinh chỉnh kernel - unit systemd tắt Transparent Huge Pages
+  ansible.builtin.copy:
+    src: disable-thp.service
+    dest: /etc/systemd/system/disable-thp.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd
+
+- name: Tinh chỉnh kernel - bật và chạy unit tắt THP
+  ansible.builtin.systemd_service:
+    name: disable-thp.service
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Tinh chỉnh kernel - vm.overcommit_memory = 1 (fork khi ghi RDB/AOF không bị lỗi)
+  ansible.posix.sysctl:
+    name: vm.overcommit_memory
+    value: "1"
+    sysctl_file: /etc/sysctl.d/99-redis.conf
+    state: present
+    reload: true
+
+- name: Sinh redis.conf từ template
+  ansible.builtin.template:
+    src: redis.conf.j2
+    dest: /etc/redis/redis.conf
+    owner: redis
+    group: root
+    mode: "0640"
+  notify: Restart redis
+
+- name: Sinh file ACL (chỉ chứa mã băm SHA-256 của mật khẩu)
+  ansible.builtin.template:
+    src: users.acl.j2
+    dest: /etc/redis/users.acl
+    owner: redis
+    group: root
+    mode: "0640"
+  notify: Restart redis
+
+- name: Bật Redis khi khởi động và đảm bảo đang chạy
+  ansible.builtin.systemd_service:
+    name: redis
+    enabled: true
+    state: started
+
+- name: Áp dụng các thay đổi đang chờ (restart Redis nếu cấu hình đổi)
+  ansible.builtin.meta: flush_handlers
+
+- name: Chờ Redis mở cổng {{ redis_port }}
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ redis_port }}"
+    timeout: 30

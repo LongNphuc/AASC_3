@@ -1,0 +1,334 @@
+################################################################
+# Bài      : 02-redis-performance
+# Thời gian: 2026-11-10 13:25:21 UTC
+# Máy      : rocky-ctl | Rocky Linux release 9.8 (Blue Onyx) | kernel 5.14.0-687.66.1.el9_8.x86_64
+# User     : rocky
+# Log      : logs/02-redis-performance-20261110-132521.log
+################################################################
+
+================================================================
+== 1. Tính maxmemory = 80% RAM và áp dụng khi Redis đang chạy
+================================================================
+
+[13:25:21] $ free -h
+               total        used        free      shared  buff/cache   available
+Mem:           1.6Gi       387Mi       1.1Gi       0.0Ki       324Mi       1.2Gi
+Swap:             0B          0B          0B
+
+[13:25:21] $ echo 'MemTotal = 1729785856 byte  =>  maxmemory (80%) = 1383828684 byte (1319 MB)'
+MemTotal = 1729785856 byte  =>  maxmemory (80%) = 1383828684 byte (1319 MB)
+
+[13:25:21] $ redis-cli CONFIG GET maxmemory
+maxmemory
+0
+
+[13:25:21] $ redis-cli CONFIG SET maxmemory 1383828684
+OK
+
+[13:25:21] $ redis-cli CONFIG SET maxmemory-policy allkeys-lru
+OK
+
+[13:25:21] $ redis-cli CONFIG REWRITE
+OK
+
+[13:25:21] $ sudo grep -nE '^(maxmemory|maxmemory-policy) ' /etc/redis/redis.conf
+2300:maxmemory-policy allkeys-lru
+2301:maxmemory 1383828684
+
+[13:25:22] $ redis-cli INFO memory | tr -d "\r" | grep -E "^(used_memory_human|maxmemory_human|maxmemory_policy):"
+used_memory_human:1.15M
+maxmemory_human:1.29G
+maxmemory_policy:allkeys-lru
+
+================================================================
+== 2. Tinh chỉnh hệ điều hành: tắt THP, bật overcommit
+================================================================
+
+[13:25:22] $ cat /sys/kernel/mm/transparent_hugepage/enabled /sys/kernel/mm/transparent_hugepage/defrag
+[always] madvise never
+always defer defer+madvise [madvise] never
+
+[13:25:22] $ sysctl vm.overcommit_memory
+vm.overcommit_memory = 0
+
+[13:25:22] $ sudo grep -E "WARNING.*(overcommit|Transparent)" /var/log/redis/redis.log | tail -2 || true
+4761:C 10 Nov 2026 13:22:39.399 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https://github.com/jemalloc/jemalloc/issues/1328. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.
+4837:C 10 Nov 2026 13:22:43.576 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https://github.com/jemalloc/jemalloc/issues/1328. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.
+
+[13:25:22] $ sudo tee /etc/systemd/system/disable-thp.service >/dev/null <<EOF
+[Unit]
+Description=Tắt Transparent Huge Pages cho Redis
+DefaultDependencies=no
+After=sysinit.target local-fs.target
+Before=redis.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c "echo never > /sys/kernel/mm/transparent_hugepage/enabled && echo never > /sys/kernel/mm/transparent_hugepage/defrag"
+
+[Install]
+WantedBy=basic.target
+EOF
+
+[13:25:22] $ sudo systemctl daemon-reload
+
+[13:25:22] $ sudo systemctl enable --now disable-thp.service
+Created symlink /etc/systemd/system/basic.target.wants/disable-thp.service → /etc/systemd/system/disable-thp.service.
+
+[13:25:22] $ echo "vm.overcommit_memory = 1" | sudo tee /etc/sysctl.d/99-redis.conf
+vm.overcommit_memory = 1
+
+[13:25:22] $ sudo sysctl -p /etc/sysctl.d/99-redis.conf
+vm.overcommit_memory = 1
+
+[13:25:22] $ cat /sys/kernel/mm/transparent_hugepage/enabled /sys/kernel/mm/transparent_hugepage/defrag
+always madvise [never]
+always defer defer+madvise madvise [never]
+
+[13:25:22] $ sudo systemctl restart redis
+
+[13:25:22] $ sudo tail -n 30 /var/log/redis/redis.log | grep -E "WARNING|Server initialized|Ready to accept" || true
+4837:M 10 Nov 2026 13:22:43.578 * Ready to accept connections tcp
+5116:M 10 Nov 2026 13:25:22.722 * Server initialized
+5116:M 10 Nov 2026 13:25:22.722 * Ready to accept connections tcp
+
+[13:25:22] $ redis-cli CONFIG GET maxmemory
+maxmemory
+1383828684
+
+================================================================
+== 3. Chuẩn bị Python (venv + redis-py) cho script đo
+================================================================
+
+[13:25:22] $ sudo dnf -y install python3-pip
+Last metadata expiration check: 0:20:31 ago on Tue 10 Nov 2026 01:04:52 PM UTC.
+Package python3-pip-21.3.1-2.el9_8.rocky.0.1.noarch is already installed.
+Dependencies resolved.
+Nothing to do.
+Complete!
+
+[13:25:23] $ [ -d /home/rocky/aasc3-venv ] || python3 -m venv /home/rocky/aasc3-venv
+
+[13:25:26] $ /home/rocky/aasc3-venv/bin/pip install -q --upgrade pip
+
+[13:25:27] $ /home/rocky/aasc3-venv/bin/pip install -q redis
+
+[13:25:28] $ /home/rocky/aasc3-venv/bin/python --version && /home/rocky/aasc3-venv/bin/pip show redis | grep -E '^(Name|Version):'
+Python 3.9.25
+Name: redis
+Version: 7.0.1
+
+================================================================
+== 4. Đo 100 lệnh SET: không pipelining và có pipelining
+================================================================
+
+[13:25:28] $ cat bench_pipeline.py
+"""Bài 2 (Phần 3): đo thời gian gửi 100 lệnh SET, gửi từng lệnh so với gửi bằng pipelining.
+
+Không pipelining: mỗi SET là một vòng gửi lệnh rồi chờ trả lời (100 round-trip).
+Có pipelining: gom 100 SET gửi một lần, đọc 100 trả lời một lần (1 round-trip).
+Mật khẩu lấy từ biến môi trường REDISCLI_AUTH, không ghi trong code.
+"""
+import os
+import statistics
+import time
+
+import redis
+
+N = 100        # số lệnh SET mỗi lần đo
+ROUNDS = 5     # số lần đo, báo cáo trung vị để bớt nhiễu
+
+r = redis.Redis(
+    host=os.environ.get("REDIS_HOST", "127.0.0.1"),
+    port=int(os.environ.get("REDIS_PORT", "6379")),
+    username=os.environ.get("REDIS_USER", "default"),
+    password=os.environ["REDISCLI_AUTH"],
+    decode_responses=True,
+)
+
+
+def no_pipeline():
+    for i in range(N):
+        r.set(f"bench:nopipe:{i}", f"value-{i}")
+
+
+def with_pipeline():
+    pipe = r.pipeline(transaction=False)  # chỉ gom lệnh, không bọc MULTI/EXEC
+    for i in range(N):
+        pipe.set(f"bench:pipe:{i}", f"value-{i}")
+    replies = pipe.execute()
+    assert replies == [True] * N, "có lệnh SET thất bại"
+
+
+def measure(fn):
+    times = []
+    for _ in range(ROUNDS):
+        start = time.perf_counter()
+        fn()
+        times.append((time.perf_counter() - start) * 1000)
+    return times
+
+
+def main():
+    r.ping()  # mở kết nối trước để không tính thời gian kết nối vào lần đo đầu
+    print(f"Redis {r.info('server')['redis_version']} tại {r.connection_pool.connection_kwargs['host']}")
+    print(f"Mỗi lần đo gửi {N} lệnh SET, đo {ROUNDS} lần\n")
+
+    t_plain = measure(no_pipeline)
+    t_pipe = measure(with_pipeline)
+
+    print(f"{'Cách gửi':<18}{'các lần đo (ms)':<44}{'trung vị (ms)':>14}")
+    for name, times in (("Từng lệnh", t_plain), ("Pipelining", t_pipe)):
+        detail = ", ".join(f"{t:.2f}" for t in times)
+        print(f"{name:<18}{detail:<44}{statistics.median(times):>14.3f}")
+    speedup = statistics.median(t_plain) / statistics.median(t_pipe)
+    print(f"\n=> Pipelining nhanh hơn khoảng {speedup:.1f} lần")
+
+    keys = list(r.scan_iter("bench:pipe:*", count=1000))
+    print(f"Số key bench:pipe:* đã ghi: {len(keys)}; ví dụ bench:pipe:99 = {r.get('bench:pipe:99')}")
+    removed = r.unlink(*keys, *r.scan_iter("bench:nopipe:*", count=1000))
+    print(f"Đã dọn {removed} key benchmark bằng UNLINK")
+
+
+if __name__ == "__main__":
+    main()
+
+[13:25:28] $ /home/rocky/aasc3-venv/bin/python bench_pipeline.py
+Redis 7.2.16 tại 127.0.0.1
+Mỗi lần đo gửi 100 lệnh SET, đo 5 lần
+
+Cách gửi          các lần đo (ms)                              trung vị (ms)
+Từng lệnh         12.00, 11.26, 11.18, 11.11, 11.30                   11.256
+Pipelining        1.77, 1.74, 1.54, 1.52, 1.52                         1.536
+
+=> Pipelining nhanh hơn khoảng 7.3 lần
+Số key bench:pipe:* đã ghi: 100; ví dụ bench:pipe:99 = value-99
+Đã dọn 200 key benchmark bằng UNLINK
+
+================================================================
+== 5. Đối chiếu bằng redis-benchmark (100.000 lệnh SET, -P 1 so với -P 100)
+================================================================
+
+[13:25:29] $ redis-benchmark -a "$REDISCLI_AUTH" -q -t set -n 100000 -P 1 2>&1 | tr "\r" "\n" | grep "requests per second"
+SET: 66755.67 requests per second, p50=0.391 msec
+
+[13:25:30] $ redis-benchmark -a "$REDISCLI_AUTH" -q -t set -n 100000 -P 100 2>&1 | tr "\r" "\n" | grep "requests per second"
+SET: 694444.50 requests per second, p50=6.503 msec
+
+[13:25:30] $ redis-cli UNLINK key:__rand_int__
+1
+
+================================================================
+== 6. Xóa key lớn: DEL so với UNLINK
+================================================================
+
+[13:25:30] $ /home/rocky/aasc3-venv/bin/python bigkey_unlink.py
+Lệnh      Số phần tử   Bộ nhớ key (MB)   Thời gian lệnh (ms)
+DEL        1,000,000              46.1               145.736
+UNLINK     1,000,000              46.1                 0.194
+
+lazyfree_pending_objects ngay sau UNLINK: 1
+Key còn tồn tại: big:del=0, big:unlink=0
+
+[13:25:35] $ redis-cli CONFIG GET lazyfree-lazy-user-del
+lazyfree-lazy-user-del
+no
+
+[13:25:35] $ redis-cli INFO memory | tr -d "\r" | grep -E "^(used_memory_human|maxmemory_human):"
+used_memory_human:24.13M
+maxmemory_human:1.29G
+
+================================================================
+== 7. Lưu cấu hình sau tinh chỉnh (mật khẩu đã che)
+================================================================
+
+[13:25:35] $ sudo cat /etc/redis/redis.conf | mask > logs/redis.conf
+
+[13:25:35] $ grep -vE "^[[:space:]]*(#|$)" logs/redis.conf
+bind 127.0.0.1 -::1 172.31.0.164
+protected-mode yes
+port 6379
+tcp-backlog 511
+timeout 0
+tcp-keepalive 300
+daemonize no
+pidfile "/var/run/redis_6379.pid"
+loglevel notice
+logfile "/var/log/redis/redis.log"
+databases 16
+always-show-logo no
+set-proc-title yes
+proc-title-template "{title} {listen-addr} {server-mode}"
+locale-collate ""
+stop-writes-on-bgsave-error yes
+rdbcompression yes
+rdbchecksum yes
+dbfilename "dump.rdb"
+rdb-del-sync-files no
+dir "/var/lib/redis"
+replica-serve-stale-data yes
+replica-read-only yes
+repl-diskless-sync yes
+repl-diskless-sync-delay 5
+repl-diskless-sync-max-replicas 0
+repl-diskless-load disabled
+repl-disable-tcp-nodelay no
+replica-priority 100
+acllog-max-len 128
+lazyfree-lazy-eviction no
+lazyfree-lazy-expire no
+lazyfree-lazy-server-del no
+replica-lazy-flush no
+lazyfree-lazy-user-del no
+lazyfree-lazy-user-flush no
+oom-score-adj no
+oom-score-adj-values 0 200 800
+disable-thp yes
+appendonly yes
+appendfilename "appendonly.aof"
+appenddirname "appendonlydir"
+appendfsync everysec
+no-appendfsync-on-rewrite no
+auto-aof-rewrite-percentage 100
+auto-aof-rewrite-min-size 64mb
+aof-load-truncated yes
+aof-use-rdb-preamble yes
+aof-timestamp-enabled no
+slowlog-log-slower-than 10000
+slowlog-max-len 128
+latency-monitor-threshold 0
+notify-keyspace-events ""
+hash-max-listpack-entries 512
+hash-max-listpack-value 64
+list-max-listpack-size -2
+list-compress-depth 0
+set-max-intset-entries 512
+set-max-listpack-entries 128
+set-max-listpack-value 64
+zset-max-listpack-entries 128
+zset-max-listpack-value 64
+hll-sparse-max-bytes 3000
+stream-node-max-bytes 4kb
+stream-node-max-entries 100
+activerehashing yes
+client-output-buffer-limit normal 0 0 0
+client-output-buffer-limit replica 256mb 64mb 60
+client-output-buffer-limit pubsub 32mb 8mb 60
+hz 10
+dynamic-hz yes
+aof-rewrite-incremental-fsync yes
+rdb-save-incremental-fsync yes
+jemalloc-bg-thread yes
+requirepass "<REDACTED>"
+save 300 10
+save 60 1000
+maxmemory-policy allkeys-lru
+maxmemory 1383828684
+latency-tracking-info-percentiles 50 99 99.9
+supervised systemd
+user default on sanitize-payload #d748a03c9a6f9904ff35f50c700bc297f265899b96919788e28511466d38289f ~* &* +@all
+
+================================================================
+== XONG Bài 2
+================================================================

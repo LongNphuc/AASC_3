@@ -1,0 +1,14 @@
+[Unit]
+Description=Tắt Transparent Huge Pages cho Redis
+DefaultDependencies=no
+After=sysinit.target local-fs.target
+Before=redis.service
+
+[Service]
+Type=oneshot
+# Giữ trạng thái active sau khi lệnh chạy xong, để systemd/Ansible biết unit đã được áp dụng
+RemainAfterExit=yes
+ExecStart=/bin/sh -c "echo never > /sys/kernel/mm/transparent_hugepage/enabled && echo never > /sys/kernel/mm/transparent_hugepage/defrag"
+
+[Install]
+WantedBy=basic.target

@@ -1,0 +1,60 @@
+4624:C 10 Nov 2026 13:22:36.553 * Redis version=7.2.16, bits=64, commit=00000000, modified=0, pid=4624, just started
+4624:C 10 Nov 2026 13:22:36.553 * Configuration loaded
+4624:M 10 Nov 2026 13:22:36.553 * monotonic clock: POSIX clock_gettime
+4624:M 10 Nov 2026 13:22:36.554 # Failed to write PID file: Permission denied
+4624:M 10 Nov 2026 13:22:36.554 * Running mode=standalone, port=6379.
+4624:M 10 Nov 2026 13:22:36.554 * Server initialized
+4624:M 10 Nov 2026 13:22:36.556 * Creating AOF base file appendonly.aof.1.base.rdb on server start
+4624:M 10 Nov 2026 13:22:36.559 * Creating AOF incr file appendonly.aof.1.incr.aof on server start
+4624:M 10 Nov 2026 13:22:36.559 * Ready to accept connections tcp
+4624:M 10 Nov 2026 13:22:36.722 * Background saving started by pid 4703
+4703:C 10 Nov 2026 13:22:36.726 * DB saved on disk
+4703:C 10 Nov 2026 13:22:36.727 * Fork CoW for RDB: current 0 MB, peak 0 MB, average 0 MB
+4624:M 10 Nov 2026 13:22:36.760 * Background saving terminated with success
+4624:signal-handler (1794316959) Received SIGTERM scheduling shutdown...
+4624:M 10 Nov 2026 13:22:39.370 * User requested shutdown...
+4624:M 10 Nov 2026 13:22:39.370 * Calling fsync() on the AOF file.
+4624:M 10 Nov 2026 13:22:39.370 * Saving the final RDB snapshot before exiting.
+4624:M 10 Nov 2026 13:22:39.373 * DB saved on disk
+4624:M 10 Nov 2026 13:22:39.373 * Removing the pid file.
+4624:M 10 Nov 2026 13:22:39.373 # Redis is now ready to exit, bye bye...
+4761:C 10 Nov 2026 13:22:39.399 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https://github.com/jemalloc/jemalloc/issues/1328. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.
+4761:C 10 Nov 2026 13:22:39.399 * Supervised by systemd. Please make sure you set appropriate values for TimeoutStartSec and TimeoutStopSec in your service unit.
+4761:C 10 Nov 2026 13:22:39.399 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+4761:C 10 Nov 2026 13:22:39.399 * Redis version=7.2.16, bits=64, commit=00000000, modified=0, pid=4761, just started
+4761:C 10 Nov 2026 13:22:39.399 * Configuration loaded
+4761:M 10 Nov 2026 13:22:39.399 * monotonic clock: POSIX clock_gettime
+4761:M 10 Nov 2026 13:22:39.400 # Failed to write PID file: Permission denied
+4761:M 10 Nov 2026 13:22:39.400 * Running mode=standalone, port=6379.
+4761:M 10 Nov 2026 13:22:39.400 * Server initialized
+4761:M 10 Nov 2026 13:22:39.401 * Reading RDB base file on AOF loading...
+4761:M 10 Nov 2026 13:22:39.401 * Loading RDB produced by version 7.2.16
+4761:M 10 Nov 2026 13:22:39.401 * RDB age 3 seconds
+4761:M 10 Nov 2026 13:22:39.401 * RDB memory usage when created 0.83 Mb
+4761:M 10 Nov 2026 13:22:39.401 * RDB is base AOF
+4761:M 10 Nov 2026 13:22:39.401 * Done loading RDB, keys loaded: 0, keys expired: 0.
+4761:M 10 Nov 2026 13:22:39.401 * DB loaded from base file appendonly.aof.1.base.rdb: 0.001 seconds
+4761:M 10 Nov 2026 13:22:39.401 * DB loaded from incr file appendonly.aof.1.incr.aof: 0.000 seconds
+4761:M 10 Nov 2026 13:22:39.401 * DB loaded from append only file: 0.001 seconds
+4761:M 10 Nov 2026 13:22:39.401 * Opening AOF incr file appendonly.aof.1.incr.aof on server start
+4761:M 10 Nov 2026 13:22:39.401 * Ready to accept connections tcp
+4837:C 10 Nov 2026 13:22:43.576 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https://github.com/jemalloc/jemalloc/issues/1328. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.
+4837:C 10 Nov 2026 13:22:43.576 * Supervised by systemd. Please make sure you set appropriate values for TimeoutStartSec and TimeoutStopSec in your service unit.
+4837:C 10 Nov 2026 13:22:43.576 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+4837:C 10 Nov 2026 13:22:43.576 * Redis version=7.2.16, bits=64, commit=00000000, modified=0, pid=4837, just started
+4837:C 10 Nov 2026 13:22:43.576 * Configuration loaded
+4837:M 10 Nov 2026 13:22:43.577 * monotonic clock: POSIX clock_gettime
+4837:M 10 Nov 2026 13:22:43.577 # Failed to write PID file: Permission denied
+4837:M 10 Nov 2026 13:22:43.577 * Running mode=standalone, port=6379.
+4837:M 10 Nov 2026 13:22:43.577 * Server initialized
+4837:M 10 Nov 2026 13:22:43.577 * Reading RDB base file on AOF loading...
+4837:M 10 Nov 2026 13:22:43.577 * Loading RDB produced by version 7.2.16
+4837:M 10 Nov 2026 13:22:43.577 * RDB age 7 seconds
+4837:M 10 Nov 2026 13:22:43.577 * RDB memory usage when created 0.83 Mb
+4837:M 10 Nov 2026 13:22:43.577 * RDB is base AOF
+4837:M 10 Nov 2026 13:22:43.577 * Done loading RDB, keys loaded: 0, keys expired: 0.
+4837:M 10 Nov 2026 13:22:43.577 * DB loaded from base file appendonly.aof.1.base.rdb: 0.000 seconds
+4837:M 10 Nov 2026 13:22:43.578 * DB loaded from incr file appendonly.aof.1.incr.aof: 0.001 seconds
+4837:M 10 Nov 2026 13:22:43.578 * DB loaded from append only file: 0.001 seconds
+4837:M 10 Nov 2026 13:22:43.578 * Opening AOF incr file appendonly.aof.1.incr.aof on server start
+4837:M 10 Nov 2026 13:22:43.578 * Ready to accept connections tcp

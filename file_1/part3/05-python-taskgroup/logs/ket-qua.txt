@@ -1,0 +1,52 @@
+######## KẾT QUẢ 05-python-taskgroup | 2026-11-10 13:36:13 UTC ########
+# Máy: rocky-ctl | Rocky Linux release 9.8 (Blue Onyx) | kernel 5.14.0-687.66.1.el9_8.x86_64 | user rocky
+== 1. Môi trường Python 3.11 (venv từ Bài 4) và thư viện HTTP bất đồng bộ aiohttp
+$ /home/rocky/py311-venv/bin/python --version
+Python 3.11.17
+== 3. Chạy script.py
+$ time /home/rocky/py311-venv/bin/python script.py
+Python 3.11.17 | aiohttp 3.14.5 | timeout cả nhóm: 5s
+
+=== 1. Năm URL thật trên Internet ===
+  [ 0.01s] xong  https://www.python.org/          HTTP 200,  53,167 byte, mất 0.01s
+  [ 0.05s] xong  https://nodejs.org/en            HTTP 200, 512,436 byte, mất 0.05s
+  [ 0.14s] xong  https://rockylinux.org/          HTTP 200, 342,125 byte, mất 0.14s
+  [ 0.16s] xong  https://redis.io/                HTTP 200, 1,708,751 byte, mất 0.16s
+  [ 0.26s] xong  https://docs.ansible.com/        HTTP 200,  23,554 byte, mất 0.26s
+  => cả 5 tác vụ xong sau 0.26s (nếu chạy tuần tự sẽ mất khoảng 0.62s)
+
+=== 2. Năm URL thử nghiệm trả lời sau 1-3 giây ===
+  [ 1.00s] xong  http://127.0.0.1:8765/delay/1    HTTP 200,       2 byte, mất 1.00s
+  [ 1.50s] xong  http://127.0.0.1:8765/delay/1.5  HTTP 200,       2 byte, mất 1.50s
+  [ 2.00s] xong  http://127.0.0.1:8765/delay/2    HTTP 200,       2 byte, mất 2.00s
+  [ 2.51s] xong  http://127.0.0.1:8765/delay/2.5  HTTP 200,       2 byte, mất 2.50s
+  [ 3.01s] xong  http://127.0.0.1:8765/delay/3    HTTP 200,       2 byte, mất 3.00s
+  => cả 5 tác vụ xong sau 3.01s (nếu chạy tuần tự sẽ mất khoảng 10.02s)
+
+=== 3. Có URL chậm 7 và 9 giây (vượt timeout 5 giây) ===
+  [ 1.00s] xong  http://127.0.0.1:8765/delay/1    HTTP 200,       2 byte, mất 1.00s
+  [ 2.00s] xong  http://127.0.0.1:8765/delay/2    HTTP 200,       2 byte, mất 2.00s
+  [ 3.00s] xong  http://127.0.0.1:8765/delay/3    HTTP 200,       2 byte, mất 3.00s
+  !! TimeoutError: quá 5s, TaskGroup đã hủy các tác vụ chưa xong
+  => sau 5.00s: xong 3/5, bị hủy 2 ['http://127.0.0.1:8765/delay/7', 'http://127.0.0.1:8765/delay/9']
+
+=== 4. Có một URL trả lỗi 500 (TaskGroup) ===
+  !! ExceptionGroup gồm 1 lỗi:
+     - HTTP 500 tại http://127.0.0.1:8765/error
+  => sau 0.01s: xong 0/5, bị hủy 4 ['http://127.0.0.1:8765/delay/1', 'http://127.0.0.1:8765/delay/2', 'http://127.0.0.1:8765/delay/3', 'http://127.0.0.1:8765/delay/4']
+
+=== 5. Cùng dữ liệu như 4 nhưng dùng gather(return_exceptions=True) ===
+  [ 1.00s] xong  http://127.0.0.1:8765/delay/1    HTTP 200,       2 byte, mất 1.00s
+  [ 2.00s] xong  http://127.0.0.1:8765/delay/2    HTTP 200,       2 byte, mất 2.00s
+  [ 3.00s] xong  http://127.0.0.1:8765/delay/3    HTTP 200,       2 byte, mất 3.00s
+  [ 4.00s] xong  http://127.0.0.1:8765/delay/4    HTTP 200,       2 byte, mất 4.00s
+     http://127.0.0.1:8765/delay/1    -> ok 1.00s
+     http://127.0.0.1:8765/delay/2    -> ok 2.00s
+     http://127.0.0.1:8765/error      -> LỖI ClientResponseError
+     http://127.0.0.1:8765/delay/3    -> ok 3.00s
+     http://127.0.0.1:8765/delay/4    -> ok 4.00s
+  => sau 4.00s: gather chờ đủ 5 tác vụ, lỗi nằm lẫn trong danh sách kết quả
+
+real	0m12.519s
+user	0m0.263s
+sys	0m0.041s

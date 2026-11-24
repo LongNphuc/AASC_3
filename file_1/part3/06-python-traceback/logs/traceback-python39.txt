@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/home/rocky/aasc3/part3/06-python-traceback/script.py", line 35, in <module>
+    main()
+  File "/home/rocky/aasc3/part3/06-python-traceback/script.py", line 27, in main
+    print(lap_bao_cao(BAO_CAO))
+  File "/home/rocky/aasc3/part3/06-python-traceback/script.py", line 22, in lap_bao_cao
+    return {"thang": bc["thang"], "trung_binh_ngay": doanh_thu_trung_binh_ngay(bc)}
+  File "/home/rocky/aasc3/part3/06-python-traceback/script.py", line 18, in doanh_thu_trung_binh_ngay
+    return round((sum(bc["doanh_thu"]) / bc["don_vi"]) / bc["so_ngay_ban"][bc["thang"]] * (1 + bc["thue"] / 100), 2)
+ZeroDivisionError: float division by zero

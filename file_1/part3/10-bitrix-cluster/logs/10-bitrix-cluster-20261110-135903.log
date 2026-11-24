@@ -1,0 +1,484 @@
+################################################################
+# Bài      : 10-bitrix-cluster
+# Thời gian: 2026-11-10 13:59:03 UTC
+# Máy      : rocky-ctl | Rocky Linux release 9.8 (Blue Onyx) | kernel 5.14.0-687.66.1.el9_8.x86_64
+# User     : rocky
+# Log      : logs/10-bitrix-cluster-20261110-135903.log
+################################################################
+
+================================================================
+== 1. Inventory và kết nối tới các máy
+================================================================
+
+[13:59:04] $ cat inventory.ini
+# Bài 10: cụm 3 máy trong cùng VPC (IP nội bộ, không đổi khi tắt/bật máy).
+# Điền IP nội bộ của 2 node sau khi tạo máy (EC2 -> Instances -> Private IPv4 address).
+[all:vars]
+ansible_python_interpreter=/usr/bin/python3
+push_redis_host=172.31.0.164
+
+[redis_servers]
+rocky-ctl ansible_connection=local
+
+[push_servers]
+rocky-node1 ansible_host=172.31.0.58 ansible_user=rocky
+rocky-node2 ansible_host=172.31.7.127 ansible_user=rocky
+
+[13:59:04] $ ansible-inventory --graph
+@all:
+  |--@ungrouped:
+  |--@redis_servers:
+  |  |--rocky-ctl
+  |--@push_servers:
+  |  |--rocky-node1
+  |  |--rocky-node2
+
+[13:59:05] $ for ip in 172.31.0.58 172.31.7.127; do ssh-keygen -F $ip >/dev/null || ssh-keyscan -T 5 -t ed25519 $ip 2>/dev/null >> ~/.ssh/known_hosts; done
+
+[13:59:05] $ ansible all -m ansible.builtin.ping | grep -E "\| (SUCCESS|UNREACHABLE|FAILED)"
+rocky-ctl | SUCCESS => {
+rocky-node1 | SUCCESS => {
+rocky-node2 | SUCCESS => {
+
+[13:59:06] $ ansible all -m ansible.builtin.command -a "cat /etc/rocky-release"
+rocky-ctl | CHANGED | rc=0 >>
+Rocky Linux release 9.8 (Blue Onyx)
+rocky-node1 | CHANGED | rc=0 >>
+Rocky Linux release 9.8 (Blue Onyx)
+rocky-node2 | CHANGED | rc=0 >>
+Rocky Linux release 9.8 (Blue Onyx)
+
+================================================================
+== 2. Lần chạy 1: dựng toàn bộ cụm
+================================================================
+
+[13:59:07] $ ansible-playbook site.yml | tee logs/run1.txt
+
+PLAY [Redis 7.2 trên rocky-ctl] ************************************************
+
+TASK [Gathering Facts] *********************************************************
+Tuesday 10 November 2026  13:59:08 +0000 (0:00:00.015)       0:00:00.015 ****** 
+ok: [rocky-ctl]
+
+TASK [redis : Kiểm tra đã khai báo user ACL] ***********************************
+Tuesday 10 November 2026  13:59:09 +0000 (0:00:01.114)       0:00:01.130 ****** 
+ok: [rocky-ctl]
+
+TASK [redis : Bật module stream redis:7 và cài Redis 7.2] **********************
+Tuesday 10 November 2026  13:59:09 +0000 (0:00:00.040)       0:00:01.171 ****** 
+ok: [rocky-ctl]
+
+TASK [redis : Tinh chỉnh kernel - unit systemd tắt Transparent Huge Pages] *****
+Tuesday 10 November 2026  13:59:10 +0000 (0:00:01.522)       0:00:02.693 ****** 
+ok: [rocky-ctl]
+
+TASK [redis : Tinh chỉnh kernel - bật và chạy unit tắt THP] ********************
+Tuesday 10 November 2026  13:59:11 +0000 (0:00:00.814)       0:00:03.508 ****** 
+ok: [rocky-ctl]
+
+TASK [redis : Tinh chỉnh kernel - vm.overcommit_memory = 1 (fork khi ghi RDB/AOF không bị lỗi)] ***
+Tuesday 10 November 2026  13:59:12 +0000 (0:00:00.965)       0:00:04.473 ****** 
+ok: [rocky-ctl]
+
+TASK [redis : Sinh redis.conf từ template] *************************************
+Tuesday 10 November 2026  13:59:13 +0000 (0:00:00.424)       0:00:04.898 ****** 
+ok: [rocky-ctl]
+
+TASK [redis : Sinh file ACL (chỉ chứa mã băm SHA-256 của mật khẩu)] ************
+Tuesday 10 November 2026  13:59:13 +0000 (0:00:00.594)       0:00:05.492 ****** 
+changed: [rocky-ctl]
+
+TASK [redis : Bật Redis khi khởi động và đảm bảo đang chạy] ********************
+Tuesday 10 November 2026  13:59:14 +0000 (0:00:00.733)       0:00:06.226 ****** 
+ok: [rocky-ctl]
+
+TASK [redis : Áp dụng các thay đổi đang chờ (restart Redis nếu cấu hình đổi)] ***
+Tuesday 10 November 2026  13:59:14 +0000 (0:00:00.450)       0:00:06.677 ****** 
+
+RUNNING HANDLER [redis : Restart redis] ****************************************
+Tuesday 10 November 2026  13:59:14 +0000 (0:00:00.004)       0:00:06.682 ****** 
+changed: [rocky-ctl]
+
+TASK [redis : Chờ Redis mở cổng 6379] ******************************************
+Tuesday 10 November 2026  13:59:15 +0000 (0:00:00.550)       0:00:07.232 ****** 
+ok: [rocky-ctl]
+
+PLAY [Node.js 20 và push-server trên các node] *********************************
+
+TASK [Gathering Facts] *********************************************************
+Tuesday 10 November 2026  13:59:15 +0000 (0:00:00.425)       0:00:07.658 ****** 
+ok: [rocky-node1]
+
+TASK [Đặt hostname theo tên trong inventory (máy tạo từ image rocky9-base mang sẵn tên cũ)] ***
+Tuesday 10 November 2026  13:59:16 +0000 (0:00:00.848)       0:00:08.507 ****** 
+ok: [rocky-node1]
+
+TASK [nodejs : Cài Node.js 20 và npm từ AppStream (module nodejs:20)] **********
+Tuesday 10 November 2026  13:59:17 +0000 (0:00:00.781)       0:00:09.288 ****** 
+changed: [rocky-node1]
+
+TASK [nodejs : Đọc phiên bản Node.js] ******************************************
+Tuesday 10 November 2026  13:59:25 +0000 (0:00:07.544)       0:00:16.833 ****** 
+ok: [rocky-node1]
+
+TASK [nodejs : Phiên bản Node.js] **********************************************
+Tuesday 10 November 2026  13:59:25 +0000 (0:00:00.427)       0:00:17.260 ****** 
+ok: [rocky-node1] => {
+    "msg": "rocky-node1: node v20.20.2"
+}
+
+TASK [push_server : User hệ thống chạy push-server] ****************************
+Tuesday 10 November 2026  13:59:25 +0000 (0:00:00.028)       0:00:17.289 ****** 
+changed: [rocky-node1]
+
+TASK [push_server : Thư mục ứng dụng] ******************************************
+Tuesday 10 November 2026  13:59:26 +0000 (0:00:00.567)       0:00:17.857 ****** 
+changed: [rocky-node1]
+
+TASK [push_server : Chép mã nguồn và khai báo thư viện] ************************
+Tuesday 10 November 2026  13:59:26 +0000 (0:00:00.296)       0:00:18.154 ****** 
+changed: [rocky-node1] => (item=push-server.js)
+changed: [rocky-node1] => (item=package.json)
+changed: [rocky-node1] => (item=package-lock.json)
+
+TASK [push_server : Kiểm tra đã có node_modules chưa] **************************
+Tuesday 10 November 2026  13:59:28 +0000 (0:00:02.168)       0:00:20.322 ****** 
+ok: [rocky-node1]
+
+TASK [push_server : Cài thư viện bằng npm ci (chỉ khi mã nguồn đổi hoặc chưa có node_modules)] ***
+Tuesday 10 November 2026  13:59:28 +0000 (0:00:00.288)       0:00:20.611 ****** 
+changed: [rocky-node1]
+
+TASK [push_server : File biến môi trường (khóa bí mật, chỉ root và pushsrv đọc được)] ***
+Tuesday 10 November 2026  13:59:30 +0000 (0:00:01.723)       0:00:22.334 ****** 
+changed: [rocky-node1]
+
+TASK [push_server : Unit systemd dạng template (push-server@sub, push-server@pub)] ***
+Tuesday 10 November 2026  13:59:31 +0000 (0:00:00.778)       0:00:23.113 ****** 
+changed: [rocky-node1]
+
+TASK [push_server : Bật và chạy tiến trình sub và pub] *************************
+Tuesday 10 November 2026  13:59:32 +0000 (0:00:00.745)       0:00:23.859 ****** 
+changed: [rocky-node1] => (item=sub)
+changed: [rocky-node1] => (item=pub)
+
+TASK [push_server : Áp dụng các thay đổi đang chờ (restart nếu mã nguồn hoặc cấu hình đổi)] ***
+Tuesday 10 November 2026  13:59:34 +0000 (0:00:02.130)       0:00:25.989 ****** 
+
+RUNNING HANDLER [push_server : Restart push-server] ****************************
+Tuesday 10 November 2026  13:59:34 +0000 (0:00:00.003)       0:00:25.992 ****** 
+changed: [rocky-node1] => (item=sub)
+changed: [rocky-node1] => (item=pub)
+
+TASK [push_server : Chờ cổng sub 8010 và pub 9010 mở] **************************
+Tuesday 10 November 2026  13:59:36 +0000 (0:00:01.793)       0:00:27.786 ****** 
+ok: [rocky-node1] => (item=8010)
+ok: [rocky-node1] => (item=9010)
+
+PLAY [Node.js 20 và push-server trên các node] *********************************
+
+TASK [Gathering Facts] *********************************************************
+Tuesday 10 November 2026  13:59:36 +0000 (0:00:00.757)       0:00:28.543 ****** 
+ok: [rocky-node2]
+
+TASK [Đặt hostname theo tên trong inventory (máy tạo từ image rocky9-base mang sẵn tên cũ)] ***
+Tuesday 10 November 2026  13:59:37 +0000 (0:00:00.846)       0:00:29.390 ****** 
+ok: [rocky-node2]
+
+TASK [nodejs : Cài Node.js 20 và npm từ AppStream (module nodejs:20)] **********
+Tuesday 10 November 2026  13:59:38 +0000 (0:00:00.525)       0:00:29.916 ****** 
+changed: [rocky-node2]
+
+TASK [nodejs : Đọc phiên bản Node.js] ******************************************
+Tuesday 10 November 2026  13:59:44 +0000 (0:00:06.811)       0:00:36.728 ****** 
+ok: [rocky-node2]
+
+TASK [nodejs : Phiên bản Node.js] **********************************************
+Tuesday 10 November 2026  13:59:45 +0000 (0:00:00.320)       0:00:37.048 ****** 
+ok: [rocky-node2] => {
+    "msg": "rocky-node2: node v20.20.2"
+}
+
+TASK [push_server : User hệ thống chạy push-server] ****************************
+Tuesday 10 November 2026  13:59:45 +0000 (0:00:00.027)       0:00:37.076 ****** 
+changed: [rocky-node2]
+
+TASK [push_server : Thư mục ứng dụng] ******************************************
+Tuesday 10 November 2026  13:59:45 +0000 (0:00:00.396)       0:00:37.472 ****** 
+changed: [rocky-node2]
+
+TASK [push_server : Chép mã nguồn và khai báo thư viện] ************************
+Tuesday 10 November 2026  13:59:46 +0000 (0:00:00.299)       0:00:37.772 ****** 
+changed: [rocky-node2] => (item=push-server.js)
+changed: [rocky-node2] => (item=package.json)
+changed: [rocky-node2] => (item=package-lock.json)
+
+TASK [push_server : Kiểm tra đã có node_modules chưa] **************************
+Tuesday 10 November 2026  13:59:48 +0000 (0:00:02.141)       0:00:39.914 ****** 
+ok: [rocky-node2]
+
+TASK [push_server : Cài thư viện bằng npm ci (chỉ khi mã nguồn đổi hoặc chưa có node_modules)] ***
+Tuesday 10 November 2026  13:59:48 +0000 (0:00:00.288)       0:00:40.202 ****** 
+changed: [rocky-node2]
+
+TASK [push_server : File biến môi trường (khóa bí mật, chỉ root và pushsrv đọc được)] ***
+Tuesday 10 November 2026  13:59:50 +0000 (0:00:01.745)       0:00:41.948 ****** 
+changed: [rocky-node2]
+
+TASK [push_server : Unit systemd dạng template (push-server@sub, push-server@pub)] ***
+Tuesday 10 November 2026  13:59:50 +0000 (0:00:00.755)       0:00:42.704 ****** 
+changed: [rocky-node2]
+
+TASK [push_server : Bật và chạy tiến trình sub và pub] *************************
+Tuesday 10 November 2026  13:59:51 +0000 (0:00:00.741)       0:00:43.445 ****** 
+changed: [rocky-node2] => (item=sub)
+changed: [rocky-node2] => (item=pub)
+
+TASK [push_server : Áp dụng các thay đổi đang chờ (restart nếu mã nguồn hoặc cấu hình đổi)] ***
+Tuesday 10 November 2026  13:59:53 +0000 (0:00:02.121)       0:00:45.567 ****** 
+
+RUNNING HANDLER [push_server : Restart push-server] ****************************
+Tuesday 10 November 2026  13:59:53 +0000 (0:00:00.003)       0:00:45.570 ****** 
+changed: [rocky-node2] => (item=sub)
+changed: [rocky-node2] => (item=pub)
+
+TASK [push_server : Chờ cổng sub 8010 và pub 9010 mở] **************************
+Tuesday 10 November 2026  13:59:55 +0000 (0:00:01.813)       0:00:47.384 ****** 
+ok: [rocky-node2] => (item=8010)
+ok: [rocky-node2] => (item=9010)
+
+PLAY [Kiểm tra từng push-server từ control node] *******************************
+
+TASK [Gọi /server-stat của tiến trình sub (8010) và pub (9010)] ****************
+Tuesday 10 November 2026  13:59:56 +0000 (0:00:00.751)       0:00:48.136 ****** 
+ok: [rocky-node1 -> rocky-ctl] => (item=8010)
+ok: [rocky-node2 -> rocky-ctl] => (item=8010)
+ok: [rocky-node1 -> rocky-ctl] => (item=9010)
+ok: [rocky-node2 -> rocky-ctl] => (item=9010)
+
+TASK [Kết quả] *****************************************************************
+Tuesday 10 November 2026  13:59:57 +0000 (0:00:01.296)       0:00:49.432 ****** 
+ok: [rocky-node1] => {
+    "msg": [
+        {
+            "channels": {},
+            "connections": 0,
+            "delivered": 0,
+            "node": "rocky-node1",
+            "role": "sub",
+            "rss_mb": 55
+        },
+        {
+            "node": "rocky-node1",
+            "published": 0,
+            "rejected": 0,
+            "role": "pub"
+        }
+    ]
+}
+ok: [rocky-node2] => {
+    "msg": [
+        {
+            "channels": {},
+            "connections": 0,
+            "delivered": 0,
+            "node": "rocky-node2",
+            "role": "sub",
+            "rss_mb": 71
+        },
+        {
+            "node": "rocky-node2",
+            "published": 0,
+            "rejected": 0,
+            "role": "pub"
+        }
+    ]
+}
+
+PLAY RECAP *********************************************************************
+rocky-ctl                  : ok=11   changed=2    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+rocky-node1                : ok=17   changed=9    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+rocky-node2                : ok=17   changed=9    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+
+
+TASKS RECAP ********************************************************************
+Tuesday 10 November 2026  13:59:57 +0000 (0:00:00.056)       0:00:49.488 ****** 
+=============================================================================== 
+nodejs : Cài Node.js 20 và npm từ AppStream (module nodejs:20) --------- 14.36s
+push_server : Chép mã nguồn và khai báo thư viện ------------------------ 4.31s
+push_server : Bật và chạy tiến trình sub và pub ------------------------- 4.25s
+push_server : Restart push-server --------------------------------------- 3.61s
+push_server : Cài thư viện bằng npm ci (chỉ khi mã nguồn đổi hoặc chưa có node_modules) --- 3.47s
+push_server : File biến môi trường (khóa bí mật, chỉ root và pushsrv đọc được) --- 1.53s
+redis : Bật module stream redis:7 và cài Redis 7.2 ---------------------- 1.52s
+push_server : Chờ cổng sub 8010 và pub 9010 mở -------------------------- 1.51s
+push_server : Unit systemd dạng template (push-server@sub, push-server@pub) --- 1.49s
+Đặt hostname theo tên trong inventory (máy tạo từ image rocky9-base mang sẵn tên cũ) --- 1.31s
+Gọi /server-stat của tiến trình sub (8010) và pub (9010) ---------------- 1.30s
+Gathering Facts --------------------------------------------------------- 1.11s
+redis : Tinh chỉnh kernel - bật và chạy unit tắt THP -------------------- 0.97s
+push_server : User hệ thống chạy push-server ---------------------------- 0.96s
+Gathering Facts --------------------------------------------------------- 0.85s
+Gathering Facts --------------------------------------------------------- 0.85s
+redis : Tinh chỉnh kernel - unit systemd tắt Transparent Huge Pages ----- 0.81s
+nodejs : Đọc phiên bản Node.js ------------------------------------------ 0.75s
+redis : Sinh file ACL (chỉ chứa mã băm SHA-256 của mật khẩu) ------------ 0.73s
+push_server : Thư mục ứng dụng ------------------------------------------ 0.60s
+
+[13:59:57] $ grep -A4 "PLAY RECAP" logs/run1.txt | grep -E "^rocky"
+rocky-ctl                  : ok=11   changed=2    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+rocky-node1                : ok=17   changed=9    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+rocky-node2                : ok=17   changed=9    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+
+================================================================
+== 3. Lần chạy 2: không thay đổi gì (idempotent)
+================================================================
+
+[13:59:57] $ ansible-playbook site.yml | tee logs/run2.txt | grep -A4 "PLAY RECAP"
+PLAY RECAP *********************************************************************
+rocky-ctl                  : ok=10   changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+rocky-node1                : ok=15   changed=0    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+rocky-node2                : ok=15   changed=0    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+
+
+[14:00:30] $ grep -E "^(rocky-ctl|rocky-node)" logs/run2.txt | grep -v "changed=0" || echo "=> ĐẠT: mọi máy đều changed=0"
+=> ĐẠT: mọi máy đều changed=0
+
+================================================================
+== 4. Trạng thái dịch vụ trên các node và Redis
+================================================================
+
+[14:00:30] $ ansible push_servers -b -m ansible.builtin.shell -a "systemctl is-active push-server@sub push-server@pub; ss -tlnp | grep -E \":(8010|9010) \""
+rocky-node1 | CHANGED | rc=0 >>
+active
+active
+LISTEN 0      511          0.0.0.0:9010      0.0.0.0:*    users:(("node",pid=7678,fd=19))                         
+LISTEN 0      511          0.0.0.0:8010      0.0.0.0:*    users:(("node",pid=7606,fd=19))                         
+rocky-node2 | CHANGED | rc=0 >>
+active
+active
+LISTEN 0      511          0.0.0.0:9010      0.0.0.0:*    users:(("node",pid=8816,fd=19))                         
+LISTEN 0      511          0.0.0.0:8010      0.0.0.0:*    users:(("node",pid=8744,fd=19))                         
+
+[14:00:32] $ REDISCLI_AUTH=$(cat ~/.aasc3/redis-admin.pass) redis-cli --user admin ACL GETUSER pushserver | paste - - | head -6
+flags	on
+sanitize-payload	passwords
+801b34dd6e64fff177750b2fc1504101b4d9d722ec2d7db27d6930e59f4f7329	commands
+-@all +@connection +@pubsub +@transaction +lpush +ltrim +lrange	keys
+~push:*	channels
+&push:*	selectors
+
+[14:00:32] $ REDISCLI_AUTH=$(cat ~/.aasc3/redis-admin.pass) redis-cli --user admin CLIENT LIST | awk '/user=pushserver/ { for (i = 1; i <= NF; i++) if ($i ~ /^(addr|cmd|user)=/) printf "%s ", $i; print "" }'
+addr=172.31.0.58:37394 cmd=psubscribe user=pushserver 
+addr=172.31.0.58:37400 cmd=NULL user=pushserver 
+addr=172.31.7.127:44446 cmd=psubscribe user=pushserver 
+addr=172.31.7.127:45250 cmd=NULL user=pushserver 
+
+================================================================
+== 5. Kiểm thử tích hợp: 200 client chia đều 2 node, backend gửi 10 tin xoay vòng qua pub của 2 node
+================================================================
+
+[14:00:32] $ (cd test && npm ci --no-audit --no-fund)
+
+added 1 package in 376ms
+
+[14:00:32] $ rm -f /tmp/cluster-test.out; (cd test && SUB_URLS=ws://172.31.0.58:8010,ws://172.31.7.127:8010 CLIENTS=200 EXPECT=10 exec node cluster-test.js > /tmp/cluster-test.out 2>&1) & echo $! > /tmp/cluster-test.pid; for i in $(seq 150); do grep -qE 'READY|Lỗi' /tmp/cluster-test.out && break; sleep 0.2; done; cat /tmp/cluster-test.out
+Đã kết nối 200 client vào kênh chat.general: {"rocky-node1":100,"rocky-node2":100}
+READY
+
+[14:00:32] $ PUSH_SECURITY_KEY=$(cat ~/.aasc3/push-security.key) /home/rocky/py311-venv/bin/python backend/backend.py --pub http://172.31.0.58:9010,http://172.31.7.127:9010 --count 10
+Python 3.11.18 | requests 2.34.2 | kênh chat.general
+  tin  1 -> http://172.31.0.58:9010      HTTP 202 {"node": "rocky-node1", "published": {"chat.general": {"redis_subscribers": 2}}}
+  tin  2 -> http://172.31.7.127:9010     HTTP 202 {"node": "rocky-node2", "published": {"chat.general": {"redis_subscribers": 2}}}
+  tin  3 -> http://172.31.0.58:9010      HTTP 202 {"node": "rocky-node1", "published": {"chat.general": {"redis_subscribers": 2}}}
+  tin  4 -> http://172.31.7.127:9010     HTTP 202 {"node": "rocky-node2", "published": {"chat.general": {"redis_subscribers": 2}}}
+  tin  5 -> http://172.31.0.58:9010      HTTP 202 {"node": "rocky-node1", "published": {"chat.general": {"redis_subscribers": 2}}}
+  tin  6 -> http://172.31.7.127:9010     HTTP 202 {"node": "rocky-node2", "published": {"chat.general": {"redis_subscribers": 2}}}
+  tin  7 -> http://172.31.0.58:9010      HTTP 202 {"node": "rocky-node1", "published": {"chat.general": {"redis_subscribers": 2}}}
+  tin  8 -> http://172.31.7.127:9010     HTTP 202 {"node": "rocky-node2", "published": {"chat.general": {"redis_subscribers": 2}}}
+  tin  9 -> http://172.31.0.58:9010      HTTP 202 {"node": "rocky-node1", "published": {"chat.general": {"redis_subscribers": 2}}}
+  tin 10 -> http://172.31.7.127:9010     HTTP 202 {"node": "rocky-node2", "published": {"chat.general": {"redis_subscribers": 2}}}
+
+[14:00:34] $ while kill -0 "$(cat /tmp/cluster-test.pid)" 2>/dev/null; do sleep 0.5; done; sed "1,2d" /tmp/cluster-test.out
+Số lượt nhận theo đường đi (client nối vào node nào <- tin vào qua pub của node nào):
+  client@rocky-node1 <- pub@rocky-node1    500
+  client@rocky-node1 <- pub@rocky-node2    500
+  client@rocky-node2 <- pub@rocky-node1    500
+  client@rocky-node2 <- pub@rocky-node2    500
+Client nhận đủ 10/10 tin: 200/200
+=> ĐẠT: tin đi qua bất kỳ node nào cũng tới mọi client trên mọi node
+
+[14:00:34] $ grep -q "=> ĐẠT" /tmp/cluster-test.out
+
+================================================================
+== 6. Bảo mật: tin gửi với chữ ký sai bị push-server từ chối (HTTP 403)
+================================================================
+
+[14:00:34] $ PUSH_SECURITY_KEY=$(cat ~/.aasc3/push-security.key) /home/rocky/py311-venv/bin/python backend/backend.py --pub http://172.31.0.58:9010,http://172.31.7.127:9010 --bad-signature
+Python 3.11.18 | requests 2.34.2 | kênh chat.general
+Gửi tin với chữ ký sai -> HTTP 403 {'error': 'invalid signature'}
+
+================================================================
+== 7. Redis lưu lịch sử kênh (3 tin gần nhất)
+================================================================
+
+[14:00:34] $ REDISCLI_AUTH=$(cat ~/.aasc3/redis-admin.pass) redis-cli --user admin LLEN push:history:chat.general
+25
+
+[14:00:34] $ REDISCLI_AUTH=$(cat ~/.aasc3/redis-admin.pass) redis-cli --user admin LRANGE push:history:chat.general 0 2
+{"type":"message","channel":"chat.general","id":"c0be9016-ae3f-4217-a7eb-1e3cf8a57538","via":"rocky-node2","ts":1794319233936,"data":{"module":"im","command":"message","params":{"from":"user-1","text":"Tin số 10"}}}
+{"type":"message","channel":"chat.general","id":"ed2ae4ba-7ed6-4ce7-892f-05d591a84e73","via":"rocky-node1","ts":1794319233832,"data":{"module":"im","command":"message","params":{"from":"user-1","text":"Tin số 9"}}}
+{"type":"message","channel":"chat.general","id":"495cb869-537f-4af2-91e4-d5c4c6afe272","via":"rocky-node2","ts":1794319233726,"data":{"module":"im","command":"message","params":{"from":"user-1","text":"Tin số 8"}}}
+
+================================================================
+== 8. Chịu lỗi: tắt tiến trình sub của node2, client trên node1 vẫn nhận tin gửi qua pub của node2
+================================================================
+
+[14:00:34] $ ansible rocky-node2 -b -m ansible.builtin.command -a "systemctl stop push-server@sub"
+rocky-node2 | CHANGED | rc=0 >>
+
+
+[14:00:35] $ ansible rocky-node2 -b -m ansible.builtin.shell -a "systemctl is-active push-server@sub || true"
+rocky-node2 | CHANGED | rc=0 >>
+inactive
+
+[14:00:36] $ rm -f /tmp/cluster-test2.out; (cd test && SUB_URLS=ws://172.31.0.58:8010 CLIENTS=50 EXPECT=5 exec node cluster-test.js > /tmp/cluster-test2.out 2>&1) & echo $! > /tmp/cluster-test2.pid; for i in $(seq 150); do grep -qE 'READY|Lỗi' /tmp/cluster-test2.out && break; sleep 0.2; done
+
+[14:00:36] $ PUSH_SECURITY_KEY=$(cat ~/.aasc3/push-security.key) /home/rocky/py311-venv/bin/python backend/backend.py --pub http://172.31.7.127:9010 --count 5
+Python 3.11.18 | requests 2.34.2 | kênh chat.general
+  tin  1 -> http://172.31.7.127:9010     HTTP 202 {"node": "rocky-node2", "published": {"chat.general": {"redis_subscribers": 1}}}
+  tin  2 -> http://172.31.7.127:9010     HTTP 202 {"node": "rocky-node2", "published": {"chat.general": {"redis_subscribers": 1}}}
+  tin  3 -> http://172.31.7.127:9010     HTTP 202 {"node": "rocky-node2", "published": {"chat.general": {"redis_subscribers": 1}}}
+  tin  4 -> http://172.31.7.127:9010     HTTP 202 {"node": "rocky-node2", "published": {"chat.general": {"redis_subscribers": 1}}}
+  tin  5 -> http://172.31.7.127:9010     HTTP 202 {"node": "rocky-node2", "published": {"chat.general": {"redis_subscribers": 1}}}
+
+[14:00:37] $ while kill -0 "$(cat /tmp/cluster-test2.pid)" 2>/dev/null; do sleep 0.5; done; cat /tmp/cluster-test2.out
+Đã kết nối 50 client vào kênh chat.general: {"rocky-node1":50}
+READY
+Số lượt nhận theo đường đi (client nối vào node nào <- tin vào qua pub của node nào):
+  client@rocky-node1 <- pub@rocky-node2    250
+Client nhận đủ 5/5 tin: 50/50
+=> ĐẠT: tin đi qua bất kỳ node nào cũng tới mọi client trên mọi node
+
+[14:00:37] $ ansible-playbook site.yml --limit rocky-node2 | grep -A2 "PLAY RECAP"
+PLAY RECAP *********************************************************************
+rocky-node2                : ok=15   changed=1    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+
+
+[14:00:50] $ ansible rocky-node2 -b -m ansible.builtin.command -a "systemctl is-active push-server@sub"
+rocky-node2 | CHANGED | rc=0 >>
+active
+
+================================================================
+== 9. Thống kê cuối của từng push-server
+================================================================
+
+[14:00:51] $ for ip in 172.31.0.58 172.31.7.127; do for p in 8010 9010; do curl -s http://$ip:$p/server-stat; echo; done; done
+{"node":"rocky-node1","role":"sub","connections":0,"channels":{},"delivered":1250,"rss_mb":60}
+{"node":"rocky-node1","role":"pub","published":5,"rejected":1}
+{"node":"rocky-node2","role":"sub","connections":0,"channels":{},"delivered":0,"rss_mb":69}
+{"node":"rocky-node2","role":"pub","published":10,"rejected":0}
+
+================================================================
+== XONG Bài 10
+================================================================

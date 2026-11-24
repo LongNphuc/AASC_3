@@ -1,0 +1,49 @@
+---
+# Bài 8 (Phần 3): triển khai Redis 7.2 lên localhost bằng Ansible.
+# Toàn bộ những gì Bài 1-3 làm bằng tay (cài từ module redis:7, bind IP nội bộ, RDB + AOF, maxmemory 80% RAM,
+# tắt THP, overcommit, ACL với user admin/app/reader) được viết thành role "redis" để chạy lặp lại được.
+# Chạy: ansible-playbook playbook.yaml
+- name: Triển khai Redis 7.2 trên localhost
+  hosts: redis_servers
+  become: true
+
+  vars:
+    # Mật khẩu sinh ngẫu nhiên một lần và lưu ở ~/.aasc3 trên control node (lookup password).
+    # Lần chạy sau đọc lại đúng file đó nên mật khẩu không đổi, playbook giữ được tính idempotent.
+    secrets_dir: "{{ lookup('ansible.builtin.env', 'HOME') }}/.aasc3"
+    redis_acl_users:
+      - name: admin
+        password: "{{ lookup('ansible.builtin.password', secrets_dir ~ '/redis-admin.pass', length=40, chars=['ascii_lowercase', 'digits']) }}"
+        rules: "~* &* +@all"
+      - name: app
+        password: "{{ lookup('ansible.builtin.password', secrets_dir ~ '/redis-app.pass', length=40, chars=['ascii_lowercase', 'digits']) }}"
+        rules: "~* &* +@all -@dangerous -@scripting"
+      - name: reader
+        password: "{{ lookup('ansible.builtin.password', secrets_dir ~ '/redis-reader.pass', length=40, chars=['ascii_lowercase', 'digits']) }}"
+        rules: "~* resetchannels -@all +@read +@connection -@dangerous +acl|whoami"
+
+  roles:
+    - redis
+
+  post_tasks:
+    - name: Kiểm tra - admin gửi PING
+      ansible.builtin.command: redis-cli --user admin ping
+      environment:
+        REDISCLI_AUTH: "{{ redis_acl_users[0].password }}"
+      register: redis_ping
+      changed_when: false
+      failed_when: redis_ping.stdout != "PONG"
+
+    - name: Kiểm tra - reader không được chạy FLUSHALL
+      ansible.builtin.command: redis-cli --user reader FLUSHALL
+      environment:
+        REDISCLI_AUTH: "{{ redis_acl_users[2].password }}"
+      register: redis_flush
+      changed_when: false
+      failed_when: "'NOPERM' not in redis_flush.stdout"
+
+    - name: Kết quả kiểm tra
+      ansible.builtin.debug:
+        msg:
+          - "PING (admin): {{ redis_ping.stdout }}"
+          - "FLUSHALL (reader): {{ redis_flush.stdout }}"

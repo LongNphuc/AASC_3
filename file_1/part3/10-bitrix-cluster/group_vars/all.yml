@@ -1,0 +1,30 @@
+---
+# Biến chung cho cụm Bài 10. Mọi bí mật sinh ngẫu nhiên một lần bằng lookup password và lưu ở ~/.aasc3
+# trên control node (rocky-ctl), không ghi trong repo. Lần chạy sau đọc lại đúng file đó nên không đổi.
+secrets_dir: "{{ lookup('ansible.builtin.env', 'HOME') }}/.aasc3"
+
+redis_admin_password: "{{ lookup('ansible.builtin.password', secrets_dir ~ '/redis-admin.pass', length=40, chars=['ascii_lowercase', 'digits']) }}"
+redis_app_password: "{{ lookup('ansible.builtin.password', secrets_dir ~ '/redis-app.pass', length=40, chars=['ascii_lowercase', 'digits']) }}"
+redis_reader_password: "{{ lookup('ansible.builtin.password', secrets_dir ~ '/redis-reader.pass', length=40, chars=['ascii_lowercase', 'digits']) }}"
+redis_pushserver_password: "{{ lookup('ansible.builtin.password', secrets_dir ~ '/redis-pushserver.pass', length=40, chars=['ascii_lowercase', 'digits']) }}"
+
+# Role redis (chạy trên rocky-ctl): thêm user pushserver chỉ được dùng kênh/key push:*
+redis_acl_users:
+  - name: admin
+    password: "{{ redis_admin_password }}"
+    rules: "~* &* +@all"
+  - name: app
+    password: "{{ redis_app_password }}"
+    rules: "~* &* +@all -@dangerous -@scripting"
+  - name: reader
+    password: "{{ redis_reader_password }}"
+    rules: "~* resetchannels -@all +@read +@connection -@dangerous +acl|whoami"
+  - name: pushserver
+    password: "{{ redis_pushserver_password }}"
+    rules: "~push:* resetchannels &push:* -@all +@connection +@pubsub +@transaction +lpush +ltrim +lrange"
+
+# Role push_server (chạy trên các node)
+push_server_redis_url: "redis://{{ push_redis_host }}:6379"
+push_server_redis_user: pushserver
+push_server_redis_password: "{{ redis_pushserver_password }}"
+push_server_security_key: "{{ lookup('ansible.builtin.password', secrets_dir ~ '/push-security.key', length=48, chars=['ascii_letters', 'digits']) }}"

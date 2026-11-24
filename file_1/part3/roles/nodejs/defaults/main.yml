@@ -1,0 +1,3 @@
+---
+# Đề yêu cầu NodeJS 20. Node.js 20 đã EOL từ 30/04/2026; hệ thống thật nên đặt "22" hoặc "24".
+nodejs_stream: "20"

@@ -1,0 +1,84 @@
+
+PLAY [Triển khai Redis 7.2 trên localhost] *************************************
+
+TASK [Gathering Facts] *********************************************************
+Tuesday 10 November 2026  13:46:42 +0000 (0:00:00.015)       0:00:00.015 ****** 
+ok: [localhost]
+
+TASK [redis : Kiểm tra đã khai báo user ACL] ***********************************
+Tuesday 10 November 2026  13:46:43 +0000 (0:00:01.091)       0:00:01.107 ****** 
+ok: [localhost]
+
+TASK [redis : Bật module stream redis:7 và cài Redis 7.2] **********************
+Tuesday 10 November 2026  13:46:43 +0000 (0:00:00.041)       0:00:01.149 ****** 
+ok: [localhost]
+
+TASK [redis : Tinh chỉnh kernel - unit systemd tắt Transparent Huge Pages] *****
+Tuesday 10 November 2026  13:46:45 +0000 (0:00:01.531)       0:00:02.680 ****** 
+ok: [localhost]
+
+TASK [redis : Tinh chỉnh kernel - bật và chạy unit tắt THP] ********************
+Tuesday 10 November 2026  13:46:46 +0000 (0:00:00.813)       0:00:03.493 ****** 
+ok: [localhost]
+
+TASK [redis : Tinh chỉnh kernel - vm.overcommit_memory = 1 (fork khi ghi RDB/AOF không bị lỗi)] ***
+Tuesday 10 November 2026  13:46:47 +0000 (0:00:00.708)       0:00:04.202 ****** 
+ok: [localhost]
+
+TASK [redis : Sinh redis.conf từ template] *************************************
+Tuesday 10 November 2026  13:46:47 +0000 (0:00:00.416)       0:00:04.618 ****** 
+ok: [localhost]
+
+TASK [redis : Sinh file ACL (chỉ chứa mã băm SHA-256 của mật khẩu)] ************
+Tuesday 10 November 2026  13:46:48 +0000 (0:00:00.577)       0:00:05.196 ****** 
+ok: [localhost]
+
+TASK [redis : Bật Redis khi khởi động và đảm bảo đang chạy] ********************
+Tuesday 10 November 2026  13:46:48 +0000 (0:00:00.587)       0:00:05.783 ****** 
+ok: [localhost]
+
+TASK [redis : Áp dụng các thay đổi đang chờ (restart Redis nếu cấu hình đổi)] ***
+Tuesday 10 November 2026  13:46:49 +0000 (0:00:00.449)       0:00:06.233 ****** 
+
+TASK [redis : Chờ Redis mở cổng 6379] ******************************************
+Tuesday 10 November 2026  13:46:49 +0000 (0:00:00.006)       0:00:06.239 ****** 
+skipping: [localhost]
+
+TASK [Kiểm tra - admin gửi PING] ***********************************************
+Tuesday 10 November 2026  13:46:49 +0000 (0:00:00.425)       0:00:06.665 ****** 
+skipping: [localhost]
+
+TASK [Kiểm tra - reader không được chạy FLUSHALL] ******************************
+Tuesday 10 November 2026  13:46:49 +0000 (0:00:00.419)       0:00:07.084 ****** 
+skipping: [localhost]
+
+TASK [Kết quả kiểm tra] ********************************************************
+Tuesday 10 November 2026  13:46:50 +0000 (0:00:00.297)       0:00:07.382 ****** 
+ok: [localhost] => {
+    "msg": [
+        "PING (admin): ",
+        "FLUSHALL (reader): "
+    ]
+}
+
+PLAY RECAP *********************************************************************
+localhost                  : ok=10   changed=0    unreachable=0    failed=0    skipped=3    rescued=0    ignored=0   
+
+
+TASKS RECAP ********************************************************************
+Tuesday 10 November 2026  13:46:50 +0000 (0:00:00.020)       0:00:07.402 ****** 
+=============================================================================== 
+redis : Bật module stream redis:7 và cài Redis 7.2 ---------------------- 1.53s
+Gathering Facts --------------------------------------------------------- 1.09s
+redis : Tinh chỉnh kernel - unit systemd tắt Transparent Huge Pages ----- 0.81s
+redis : Tinh chỉnh kernel - bật và chạy unit tắt THP -------------------- 0.71s
+redis : Sinh file ACL (chỉ chứa mã băm SHA-256 của mật khẩu) ------------ 0.59s
+redis : Sinh redis.conf từ template ------------------------------------- 0.58s
+redis : Bật Redis khi khởi động và đảm bảo đang chạy -------------------- 0.45s
+redis : Chờ Redis mở cổng 6379 ------------------------------------------ 0.43s
+Kiểm tra - admin gửi PING ----------------------------------------------- 0.42s
+redis : Tinh chỉnh kernel - vm.overcommit_memory = 1 (fork khi ghi RDB/AOF không bị lỗi) --- 0.42s
+Kiểm tra - reader không được chạy FLUSHALL ------------------------------ 0.30s
+redis : Kiểm tra đã khai báo user ACL ----------------------------------- 0.04s
+Kết quả kiểm tra -------------------------------------------------------- 0.02s
+redis : Áp dụng các thay đổi đang chờ (restart Redis nếu cấu hình đổi) --- 0.01s

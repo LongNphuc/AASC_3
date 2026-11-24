@@ -1,0 +1,41 @@
+---
+# Bài 10 (Phần 3): dựng cụm Bitrix24 On-Premise mô phỏng bằng một lệnh: ansible-playbook site.yml
+#   rocky-ctl            : Redis 7.2 (role redis) làm cầu nối message, backend Python 3.11, control node Ansible
+#   rocky-node1, node2   : Node.js 20 (role nodejs) + push-server sub/pub (role push_server)
+
+- name: Redis 7.2 trên rocky-ctl
+  hosts: redis_servers
+  become: true
+  roles:
+    - redis
+
+- name: Node.js 20 và push-server trên các node
+  hosts: push_servers
+  become: true
+  # Rolling update: xử lý từng node một, node đang cập nhật restart thì node còn lại vẫn phục vụ client
+  serial: 1
+  pre_tasks:
+    - name: Đặt hostname theo tên trong inventory (máy tạo từ image rocky9-base mang sẵn tên cũ)
+      ansible.builtin.hostname:
+        name: "{{ inventory_hostname }}"
+  roles:
+    - nodejs
+    - push_server
+
+- name: Kiểm tra từng push-server từ control node
+  hosts: push_servers
+  gather_facts: false
+  tasks:
+    - name: Gọi /server-stat của tiến trình sub (8010) và pub (9010)
+      ansible.builtin.uri:
+        url: "http://{{ ansible_host }}:{{ item }}/server-stat"
+        return_content: true
+      loop:
+        - 8010
+        - 9010
+      delegate_to: "{{ groups['redis_servers'][0] }}"
+      register: push_stat
+
+    - name: Kết quả
+      ansible.builtin.debug:
+        msg: "{{ push_stat.results | map(attribute='json') | list }}"

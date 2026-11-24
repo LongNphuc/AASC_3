@@ -1,0 +1,17 @@
+{
+  "name": "aasc3-chat-server",
+  "version": "1.0.0",
+  "description": "Bài 7: chat server WebSocket trên một event loop Node.js 20",
+  "private": true,
+  "main": "server.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "load-test": "node load-test.js"
+  },
+  "dependencies": {
+    "ws": "8.22.1"
+  }
+}

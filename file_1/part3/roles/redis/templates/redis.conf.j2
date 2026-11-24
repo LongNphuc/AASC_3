@@ -1,0 +1,39 @@
+# {{ ansible_managed }}
+# Redis 7.2 - cấu hình tối giản: chỉ ghi các tham số khác mặc định hoặc cần nhấn mạnh,
+# các tham số còn lại dùng giá trị mặc định của Redis. Sửa tay sẽ bị Ansible ghi đè ở lần chạy sau.
+
+# --- Mạng và bảo mật ---
+bind {{ redis_bind | join(' ') }}
+protected-mode yes
+port {{ redis_port }}
+# Người dùng và quyền nằm trong file ACL (không dùng requirepass cùng lúc với aclfile)
+aclfile /etc/redis/users.acl
+enable-debug-command no
+enable-module-command no
+
+# --- Tiến trình (chạy dưới systemd) ---
+daemonize no
+supervised systemd
+pidfile /var/run/redis_{{ redis_port }}.pid
+loglevel notice
+logfile /var/log/redis/redis.log
+dir /var/lib/redis
+
+# --- RDB ---
+save {{ redis_save }}
+dbfilename dump.rdb
+
+# --- AOF ---
+appendonly yes
+appendfilename "appendonly.aof"
+appenddirname "appendonlydir"
+appendfsync everysec
+aof-use-rdb-preamble yes
+
+# --- Bộ nhớ: {{ redis_maxmemory_percent }}% của {{ ansible_facts['memtotal_mb'] }} MB RAM ---
+maxmemory {{ (ansible_facts['memtotal_mb'] * redis_maxmemory_percent / 100) | int }}mb
+maxmemory-policy {{ redis_maxmemory_policy }}
+# Xóa/loại bỏ key ở luồng nền: DEL hoạt động như UNLINK
+lazyfree-lazy-user-del yes
+lazyfree-lazy-eviction yes
+lazyfree-lazy-expire yes

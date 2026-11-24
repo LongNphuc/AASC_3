@@ -1,0 +1,24 @@
+[Unit]
+Description=AASC3 chat server (Node.js WebSocket, Bài 7)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=chatsrv
+Group=chatsrv
+WorkingDirectory=/opt/chat-server
+Environment=NODE_ENV=production PORT=8080 HOST=127.0.0.1
+ExecStart=/usr/bin/node /opt/chat-server/server.js
+Restart=on-failure
+RestartSec=2
+# Mỗi kết nối WebSocket là một file descriptor: nâng giới hạn để phục vụ hàng nghìn kết nối
+LimitNOFILE=65535
+# Giới hạn quyền của tiến trình
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

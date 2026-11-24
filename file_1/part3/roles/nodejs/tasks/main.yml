@@ -1,0 +1,14 @@
+---
+- name: Cài Node.js {{ nodejs_stream }} và npm từ AppStream (module nodejs:{{ nodejs_stream }})
+  ansible.builtin.dnf:
+    name: "@nodejs:{{ nodejs_stream }}/common"
+    state: present
+
+- name: Đọc phiên bản Node.js
+  ansible.builtin.command: node --version
+  register: nodejs_version
+  changed_when: false
+
+- name: Phiên bản Node.js
+  ansible.builtin.debug:
+    msg: "{{ inventory_hostname }}: node {{ nodejs_version.stdout }}"

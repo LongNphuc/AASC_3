@@ -1,0 +1,26 @@
+######## KẾT QUẢ 07-nodejs-chat | 2026-11-10 13:43:59 UTC ########
+# Máy: rocky-ctl | Rocky Linux release 9.8 (Blue Onyx) | kernel 5.14.0-687.66.1.el9_8.x86_64 | user rocky
+== 1. Cài Node.js 20 (module nodejs:20 của AppStream)
+$ node --version && npm --version
+v20.20.2
+10.8.2
+== 3. Chạy bằng systemd (LimitNOFILE=65535 để giữ được hàng nghìn kết nối)
+$ systemctl is-active chat-server
+active
+$ sudo ss -tlnp | grep 8080
+LISTEN 0      511        127.0.0.1:8080      0.0.0.0:*    users:(("node",pid=20672,fd=18))                        
+$ grep "open files" /proc/$(systemctl show -p MainPID --value chat-server)/limits
+Max open files            65535                65535                files     
+== 4. Kiểm thử 1000 kết nối đồng thời
+$ (ulimit -n 4096 && cd /opt/chat-server && node load-test.js)
+Kết nối tới ws://127.0.0.1:8080/chat, số client: 1000
+[1] Mở 1000 kết nối đồng thời mất 676 ms
+[2] 1000 ping đồng thời xong sau 154 ms | RTT p50=68.0 ms, p95=85.9 ms, max=92.6 ms
+[3] 10 tin chat -> 10000/10000 lượt phát tới client sau 323 ms; mọi client nhận đủ 10 tin: ĐÚNG
+[4] /stats khi đang có kết nối: {"connections":1000,"peak_connections":1000,"messages_received":1010,"rss_mb":71.5,"event_loop_delay_p99_ms":65.18,"event_loop_delay_max_ms":284.95,"node":"v20.20.2","pid":20672}
+[5] Sau khi đóng: connections=0, peak_connections=1000
+=> ĐẠT: server phục vụ 1000 kết nối đồng thời
+== 5. Tài nguyên server: một tiến trình, vài luồng nội bộ của V8/libuv
+$ ps -o pid,nlwp,rss,etime,cmd -p "$(systemctl show -p MainPID --value chat-server)"
+    PID NLWP   RSS     ELAPSED CMD
+  20672    7 78720       00:03 /usr/bin/node /opt/chat-server/server.js

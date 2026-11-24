@@ -1,0 +1,107 @@
+################################################################
+# Bài      : 06-python-traceback
+# Thời gian: 2026-11-10 13:40:01 UTC
+# Máy      : rocky-ctl | Rocky Linux release 9.8 (Blue Onyx) | kernel 5.14.0-687.66.1.el9_8.x86_64
+# User     : rocky
+# Log      : logs/06-python-traceback-20261110-134001.log
+################################################################
+
+================================================================
+== 1. Mã nguồn script.py
+================================================================
+
+[13:40:02] $ cat -n script.py
+     1	"""Bài 6 (Phần 3): ZeroDivisionError nằm trong biểu thức lồng nhau, để so sánh traceback giữa Python 3.9 và 3.11.
+     2	
+     3	Doanh thu trung bình mỗi ngày của một tháng = (tổng doanh thu / số đơn vị) / số ngày bán hàng * hệ số thuế.
+     4	Dữ liệu tháng 3 có số ngày bán hàng bằng 0, nên một trong ba phép chia trên cùng một dòng sẽ lỗi.
+     5	Python 3.9 chỉ báo số dòng; Python 3.11 đánh dấu đúng phép chia gây lỗi (PEP 657).
+     6	"""
+     7	
+     8	BAO_CAO = {
+     9	    "thang": "T3",
+    10	    "doanh_thu": [120_000_000, 95_000_000, 143_000_000],
+    11	    "don_vi": 3,
+    12	    "so_ngay_ban": {"T1": 26, "T2": 24, "T3": 0},
+    13	    "thue": 10,
+    14	}
+    15	
+    16	
+    17	def doanh_thu_trung_binh_ngay(bc):
+    18	    return round((sum(bc["doanh_thu"]) / bc["don_vi"]) / bc["so_ngay_ban"][bc["thang"]] * (1 + bc["thue"] / 100), 2)
+    19	
+    20	
+    21	def lap_bao_cao(bc):
+    22	    return {"thang": bc["thang"], "trung_binh_ngay": doanh_thu_trung_binh_ngay(bc)}
+    23	
+    24	
+    25	def main():
+    26	    try:
+    27	        print(lap_bao_cao(BAO_CAO))
+    28	    except ZeroDivisionError as e:
+    29	        if hasattr(e, "add_note"):  # PEP 678, có từ Python 3.11
+    30	            e.add_note(f"Gợi ý: kiểm tra so_ngay_ban của tháng {BAO_CAO['thang']} trong dữ liệu đầu vào")
+    31	        raise
+    32	
+    33	
+    34	if __name__ == "__main__":
+    35	    main()
+
+================================================================
+== 2. Python 3.11: traceback đánh dấu đúng phép chia gây lỗi, kèm ghi chú add_note()
+================================================================
+
+[13:40:02] $ python3.11 --version
+Python 3.11.17
+
+[13:40:02] $ python3.11 script.py 2>&1 | tee logs/traceback-python311.txt || echo "=> script thoát với mã $? (đúng như mong đợi)"
+Traceback (most recent call last):
+  File "/home/rocky/aasc3/part3/06-python-traceback/script.py", line 35, in <module>
+    main()
+  File "/home/rocky/aasc3/part3/06-python-traceback/script.py", line 27, in main
+    print(lap_bao_cao(BAO_CAO))
+          ^^^^^^^^^^^^^^^^^^^^
+  File "/home/rocky/aasc3/part3/06-python-traceback/script.py", line 22, in lap_bao_cao
+    return {"thang": bc["thang"], "trung_binh_ngay": doanh_thu_trung_binh_ngay(bc)}
+                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rocky/aasc3/part3/06-python-traceback/script.py", line 18, in doanh_thu_trung_binh_ngay
+    return round((sum(bc["doanh_thu"]) / bc["don_vi"]) / bc["so_ngay_ban"][bc["thang"]] * (1 + bc["thue"] / 100), 2)
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ZeroDivisionError: float division by zero
+Gợi ý: kiểm tra so_ngay_ban của tháng T3 trong dữ liệu đầu vào
+=> script thoát với mã 1 (đúng như mong đợi)
+
+================================================================
+== 3. Python 3.9 (python3 của hệ thống) với cùng script: chỉ có số dòng
+================================================================
+
+[13:40:02] $ /usr/bin/python3 --version
+Python 3.9.25
+
+[13:40:02] $ /usr/bin/python3 script.py 2>&1 | tee logs/traceback-python39.txt || echo "=> script thoát với mã $? (đúng như mong đợi)"
+Traceback (most recent call last):
+  File "/home/rocky/aasc3/part3/06-python-traceback/script.py", line 35, in <module>
+    main()
+  File "/home/rocky/aasc3/part3/06-python-traceback/script.py", line 27, in main
+    print(lap_bao_cao(BAO_CAO))
+  File "/home/rocky/aasc3/part3/06-python-traceback/script.py", line 22, in lap_bao_cao
+    return {"thang": bc["thang"], "trung_binh_ngay": doanh_thu_trung_binh_ngay(bc)}
+  File "/home/rocky/aasc3/part3/06-python-traceback/script.py", line 18, in doanh_thu_trung_binh_ngay
+    return round((sum(bc["doanh_thu"]) / bc["don_vi"]) / bc["so_ngay_ban"][bc["thang"]] * (1 + bc["thue"] / 100), 2)
+ZeroDivisionError: float division by zero
+=> script thoát với mã 1 (đúng như mong đợi)
+
+================================================================
+== 4. Python 3.11 khi tắt thông tin vị trí cột (-X no_debug_ranges): quay lại kiểu cũ
+================================================================
+
+[13:40:02] $ python3.11 -X no_debug_ranges script.py 2>&1 | tail -5 || true
+    return {"thang": bc["thang"], "trung_binh_ngay": doanh_thu_trung_binh_ngay(bc)}
+  File "/home/rocky/aasc3/part3/06-python-traceback/script.py", line 18, in doanh_thu_trung_binh_ngay
+    return round((sum(bc["doanh_thu"]) / bc["don_vi"]) / bc["so_ngay_ban"][bc["thang"]] * (1 + bc["thue"] / 100), 2)
+ZeroDivisionError: float division by zero
+Gợi ý: kiểm tra so_ngay_ban của tháng T3 trong dữ liệu đầu vào
+
+================================================================
+== XONG Bài 6
+================================================================

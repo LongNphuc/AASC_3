@@ -1,0 +1,17 @@
+---
+# Role redis: cài Redis 7.2 từ AppStream (module redis:7) và cấu hình theo Bài 1-3.
+redis_module_stream: "7"
+redis_port: 6379
+# Chỉ nghe trên loopback và IP nội bộ của máy (không bao giờ IP public)
+redis_bind:
+  - 127.0.0.1
+  - -::1
+  - "{{ ansible_facts['default_ipv4']['address'] }}"
+# RDB: snapshot sau 300 giây nếu >= 10 thay đổi, hoặc sau 60 giây nếu >= 1000 thay đổi
+redis_save: "300 10 60 1000"
+# maxmemory tính theo phần trăm RAM của máy đích (đề yêu cầu 75-85%)
+redis_maxmemory_percent: 80
+redis_maxmemory_policy: allkeys-lru
+# Người dùng ACL. Mỗi phần tử: name, password, rules. User default luôn bị tắt.
+# Playbook phải truyền danh sách này (mật khẩu không đặt trong role).
+redis_acl_users: []

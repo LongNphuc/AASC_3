@@ -1,0 +1,14 @@
+{
+  "name": "aasc3-push-server",
+  "version": "1.0.0",
+  "description": "Bài 10: push-server mô phỏng Bitrix24 (sub WebSocket + pub HTTP, Redis làm cầu nối giữa các node)",
+  "private": true,
+  "main": "push-server.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "redis": "6.3.1",
+    "ws": "8.22.1"
+  }
+}

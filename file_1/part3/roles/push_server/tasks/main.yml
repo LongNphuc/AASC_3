@@ -1,0 +1,78 @@
+---
+- name: User hệ thống chạy push-server
+  ansible.builtin.user:
+    name: "{{ push_server_user }}"
+    system: true
+    shell: /sbin/nologin
+    create_home: false
+
+- name: Thư mục ứng dụng
+  ansible.builtin.file:
+    path: "{{ push_server_dir }}"
+    state: directory
+    owner: root
+    group: "{{ push_server_user }}"
+    mode: "0750"
+
+- name: Chép mã nguồn và khai báo thư viện
+  ansible.builtin.copy:
+    src: "{{ push_server_app_src }}{{ item }}"
+    dest: "{{ push_server_dir }}/{{ item }}"
+    owner: root
+    group: "{{ push_server_user }}"
+    mode: "0640"
+  loop: "{{ push_server_files }}"
+  register: push_server_copy
+  notify: Restart push-server
+
+- name: Kiểm tra đã có node_modules chưa
+  ansible.builtin.stat:
+    path: "{{ push_server_dir }}/node_modules"
+  register: push_server_modules
+
+- name: Cài thư viện bằng npm ci (chỉ khi mã nguồn đổi hoặc chưa có node_modules)
+  ansible.builtin.command:
+    cmd: npm ci --omit=dev
+    chdir: "{{ push_server_dir }}"
+  when: push_server_copy.changed or not push_server_modules.stat.exists
+  notify: Restart push-server
+
+- name: File biến môi trường (khóa bí mật, chỉ root và {{ push_server_user }} đọc được)
+  ansible.builtin.template:
+    src: push-server.env.j2
+    dest: "{{ push_server_dir }}/push-server.env"
+    owner: root
+    group: "{{ push_server_user }}"
+    mode: "0640"
+  diff: false
+  notify: Restart push-server
+
+- name: Unit systemd dạng template (push-server@sub, push-server@pub)
+  ansible.builtin.template:
+    src: push-server@.service.j2
+    dest: /etc/systemd/system/push-server@.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart push-server
+
+- name: Bật và chạy tiến trình sub và pub
+  ansible.builtin.systemd_service:
+    name: "push-server@{{ item }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+  loop:
+    - sub
+    - pub
+
+- name: Áp dụng các thay đổi đang chờ (restart nếu mã nguồn hoặc cấu hình đổi)
+  ansible.builtin.meta: flush_handlers
+
+- name: Chờ cổng sub 8010 và pub 9010 mở
+  ansible.builtin.wait_for:
+    port: "{{ item }}"
+    timeout: 30
+  loop:
+    - 8010
+    - 9010

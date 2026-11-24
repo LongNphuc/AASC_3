@@ -1,0 +1,27 @@
+---
+# Bài 9 (Phần 3): cập nhật Python 3.11 trên máy chủ bằng Ansible, đảm bảo idempotent.
+# Máy đang có 3.11.17 (Bài 4) -> playbook đưa lên 3.11.18. Chạy lại lần nữa thì không build lại (changed=0).
+# Đổi phiên bản mục tiêu: ansible-playbook playbook.yaml -e python311_version=3.11.18
+- name: Cập nhật Python 3.11 lên bản bảo trì mới nhất
+  hosts: python_servers
+  become: true
+  roles:
+    - python311
+
+  post_tasks:
+    - name: Virtualenv tạo từ trước (Bài 4) vẫn chạy được với bản vá mới
+      ansible.builtin.command: >-
+        {{ venv_path }}/bin/python -c
+        "import sys, requests; print(sys.version.split()[0], 'requests', requests.__version__)"
+      vars:
+        venv_path: "/home/{{ ansible_facts['env']['SUDO_USER'] | default('rocky') }}/py311-venv"
+      become: false
+      register: venv_check
+      changed_when: false
+      failed_when: false
+
+    - name: Kết quả
+      ansible.builtin.debug:
+        msg:
+          - "python3.11 hệ thống: {{ python311_after.stdout }}"
+          - "venv ~/py311-venv: {{ venv_check.stdout | default('không có venv') }}"

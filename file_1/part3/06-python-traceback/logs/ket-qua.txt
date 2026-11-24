@@ -1,0 +1,36 @@
+######## KẾT QUẢ 06-python-traceback | 2026-11-10 13:40:02 UTC ########
+# Máy: rocky-ctl | Rocky Linux release 9.8 (Blue Onyx) | kernel 5.14.0-687.66.1.el9_8.x86_64 | user rocky
+== 2. Python 3.11: traceback đánh dấu đúng phép chia gây lỗi, kèm ghi chú add_note()
+$ python3.11 --version
+Python 3.11.17
+$ python3.11 script.py 2>&1 | tee logs/traceback-python311.txt || echo "=> script thoát với mã $? (đúng như mong đợi)"
+Traceback (most recent call last):
+  File "/home/rocky/aasc3/part3/06-python-traceback/script.py", line 35, in <module>
+    main()
+  File "/home/rocky/aasc3/part3/06-python-traceback/script.py", line 27, in main
+    print(lap_bao_cao(BAO_CAO))
+          ^^^^^^^^^^^^^^^^^^^^
+  File "/home/rocky/aasc3/part3/06-python-traceback/script.py", line 22, in lap_bao_cao
+    return {"thang": bc["thang"], "trung_binh_ngay": doanh_thu_trung_binh_ngay(bc)}
+                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rocky/aasc3/part3/06-python-traceback/script.py", line 18, in doanh_thu_trung_binh_ngay
+    return round((sum(bc["doanh_thu"]) / bc["don_vi"]) / bc["so_ngay_ban"][bc["thang"]] * (1 + bc["thue"] / 100), 2)
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ZeroDivisionError: float division by zero
+Gợi ý: kiểm tra so_ngay_ban của tháng T3 trong dữ liệu đầu vào
+=> script thoát với mã 1 (đúng như mong đợi)
+== 3. Python 3.9 (python3 của hệ thống) với cùng script: chỉ có số dòng
+$ /usr/bin/python3 --version
+Python 3.9.25
+$ /usr/bin/python3 script.py 2>&1 | tee logs/traceback-python39.txt || echo "=> script thoát với mã $? (đúng như mong đợi)"
+Traceback (most recent call last):
+  File "/home/rocky/aasc3/part3/06-python-traceback/script.py", line 35, in <module>
+    main()
+  File "/home/rocky/aasc3/part3/06-python-traceback/script.py", line 27, in main
+    print(lap_bao_cao(BAO_CAO))
+  File "/home/rocky/aasc3/part3/06-python-traceback/script.py", line 22, in lap_bao_cao
+    return {"thang": bc["thang"], "trung_binh_ngay": doanh_thu_trung_binh_ngay(bc)}
+  File "/home/rocky/aasc3/part3/06-python-traceback/script.py", line 18, in doanh_thu_trung_binh_ngay
+    return round((sum(bc["doanh_thu"]) / bc["don_vi"]) / bc["so_ngay_ban"][bc["thang"]] * (1 + bc["thue"] / 100), 2)
+ZeroDivisionError: float division by zero
+=> script thoát với mã 1 (đúng như mong đợi)

@@ -1,0 +1,48 @@
+######## KẾT QUẢ 02-redis-performance | 2026-11-10 13:25:21 UTC ########
+# Máy: rocky-ctl | Rocky Linux release 9.8 (Blue Onyx) | kernel 5.14.0-687.66.1.el9_8.x86_64 | user rocky
+== 1. Tính maxmemory = 80% RAM và áp dụng khi Redis đang chạy
+$ echo 'MemTotal = 1729785856 byte  =>  maxmemory (80%) = 1383828684 byte (1319 MB)'
+MemTotal = 1729785856 byte  =>  maxmemory (80%) = 1383828684 byte (1319 MB)
+$ sudo grep -nE '^(maxmemory|maxmemory-policy) ' /etc/redis/redis.conf
+2300:maxmemory-policy allkeys-lru
+2301:maxmemory 1383828684
+== 2. Tinh chỉnh hệ điều hành: tắt THP, bật overcommit
+$ cat /sys/kernel/mm/transparent_hugepage/enabled /sys/kernel/mm/transparent_hugepage/defrag
+[always] madvise never
+always defer defer+madvise [madvise] never
+$ sysctl vm.overcommit_memory
+vm.overcommit_memory = 0
+$ sudo sysctl -p /etc/sysctl.d/99-redis.conf
+vm.overcommit_memory = 1
+$ cat /sys/kernel/mm/transparent_hugepage/enabled /sys/kernel/mm/transparent_hugepage/defrag
+always madvise [never]
+always defer defer+madvise madvise [never]
+$ sudo tail -n 30 /var/log/redis/redis.log | grep -E "WARNING|Server initialized|Ready to accept" || true
+4837:M 10 Nov 2026 13:22:43.578 * Ready to accept connections tcp
+5116:M 10 Nov 2026 13:25:22.722 * Server initialized
+5116:M 10 Nov 2026 13:25:22.722 * Ready to accept connections tcp
+== 4. Đo 100 lệnh SET: không pipelining và có pipelining
+$ /home/rocky/aasc3-venv/bin/python bench_pipeline.py
+Redis 7.2.16 tại 127.0.0.1
+Mỗi lần đo gửi 100 lệnh SET, đo 5 lần
+
+Cách gửi          các lần đo (ms)                              trung vị (ms)
+Từng lệnh         12.00, 11.26, 11.18, 11.11, 11.30                   11.256
+Pipelining        1.77, 1.74, 1.54, 1.52, 1.52                         1.536
+
+=> Pipelining nhanh hơn khoảng 7.3 lần
+Số key bench:pipe:* đã ghi: 100; ví dụ bench:pipe:99 = value-99
+Đã dọn 200 key benchmark bằng UNLINK
+== 5. Đối chiếu bằng redis-benchmark (100.000 lệnh SET, -P 1 so với -P 100)
+$ redis-benchmark -a "$REDISCLI_AUTH" -q -t set -n 100000 -P 1 2>&1 | tr "\r" "\n" | grep "requests per second"
+SET: 66755.67 requests per second, p50=0.391 msec
+$ redis-benchmark -a "$REDISCLI_AUTH" -q -t set -n 100000 -P 100 2>&1 | tr "\r" "\n" | grep "requests per second"
+SET: 694444.50 requests per second, p50=6.503 msec
+== 6. Xóa key lớn: DEL so với UNLINK
+$ /home/rocky/aasc3-venv/bin/python bigkey_unlink.py
+Lệnh      Số phần tử   Bộ nhớ key (MB)   Thời gian lệnh (ms)
+DEL        1,000,000              46.1               145.736
+UNLINK     1,000,000              46.1                 0.194
+
+lazyfree_pending_objects ngay sau UNLINK: 1
+Key còn tồn tại: big:del=0, big:unlink=0

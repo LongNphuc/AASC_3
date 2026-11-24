@@ -1,0 +1,67 @@
+######## KẾT QUẢ 01-redis-persistence | 2026-11-10 13:22:30 UTC ########
+# Máy: rocky-ctl | Rocky Linux release 9.8 (Blue Onyx) | kernel 5.14.0-687.66.1.el9_8.x86_64 | user rocky
+== 1. Cài Redis 7.2 từ AppStream (module redis:7)
+$ rpm -q redis
+redis-7.2.16-1.module+el9.8.0+40315+e15874a8.x86_64
+$ redis-server --version
+Redis server v=7.2.16 sha=00000000:0 malloc=jemalloc-5.3.0 bits=64 build=ad751272cb6537e5
+$ rpm -q --changelog redis | grep -oE "CVE-[0-9]{4}-[0-9]+" | sort -u | tr "\\n" " "; echo
+CVE-2024-46981 CVE-2024-51741 CVE-2025-21605 CVE-2025-27151 CVE-2025-32023 CVE-2025-46817 CVE-2025-46818 CVE-2025-46819 CVE-2025-48367 CVE-2025-49844 CVE-2026-23479 CVE-2026-23631 CVE-2026-25243 CVE-2026-66373 CVE-2026-72568 
+== 2. Cấu hình bảo mật và bền vững dữ liệu trong /etc/redis/redis.conf
+$ sudo grep -E '^(bind|protected-mode|port|requirepass|save|appendonly|appendfsync|aof-use-rdb-preamble) ' /etc/redis/redis.conf | mask
+bind 127.0.0.1 -::1 172.31.0.164
+protected-mode yes
+port 6379
+appendonly yes
+appendfsync everysec
+aof-use-rdb-preamble yes
+requirepass <REDACTED>
+save 300 10 60 1000
+== 3. Khởi động Redis và bật tự chạy khi boot
+$ sudo ss -tlnp | grep 6379
+LISTEN 0      511        127.0.0.1:6379      0.0.0.0:*    users:(("redis-server",pid=4624,fd=6))                  
+LISTEN 0      511     172.31.0.164:6379      0.0.0.0:*    users:(("redis-server",pid=4624,fd=8))                  
+LISTEN 0      511            [::1]:6379         [::]:*    users:(("redis-server",pid=4624,fd=7))                  
+== 4. Kiểm tra xác thực (requirepass) và địa chỉ lắng nghe (bind)
+$ env -u REDISCLI_AUTH redis-cli ping
+NOAUTH Authentication required.
+
+$ redis-cli ping
+PONG
+$ redis-cli -h 172.31.0.164 ping
+PONG
+== 6. Ép ghi RDB, chờ AOF fsync, xem file trên đĩa
+$ sudo find /var/lib/redis -type f -printf "%p  (%s byte)\n" | sort
+/var/lib/redis/appendonlydir/appendonly.aof.1.base.rdb  (89 byte)
+/var/lib/redis/appendonlydir/appendonly.aof.1.incr.aof  (532 byte)
+/var/lib/redis/appendonlydir/appendonly.aof.manifest  (88 byte)
+/var/lib/redis/dump.rdb  (379 byte)
+$ sudo sh -c "cat /var/lib/redis/appendonlydir/*.incr.aof" | aof_to_commands | tail -8
+SELECT 0
+SET app:name AASC3 Redis demo
+HSET user:1001 name Nguyen Van An email an@example.com age 30
+RPUSH queue:jobs job-1 job-2 job-3
+SADD tags redis python nodejs ansible
+ZADD leaderboard 1500 alice 2300 bob 1800 carol
+INCRBY counter:visits 42
+SET session:abc phien tam PXAT 1794320556680
+== 7. Restart service rồi kiểm tra dữ liệu
+$ redis-cli INFO server | tr -d "\r" | grep -E "^(run_id|process_id):"
+process_id:4624
+run_id:33f344064d38f6524b46398f6c29a7e9497bca2c
+$ redis-cli INFO server | tr -d "\r" | grep -E "^(run_id|process_id):"
+process_id:4761
+run_id:43a2d34526710c9ca5b8146f089cd916869375a3
+$ diff /tmp/aasc3-before.txt /tmp/aasc3-after.txt && echo "=> Dữ liệu trước và sau restart giống hệt nhau"
+=> Dữ liệu trước và sau restart giống hệt nhau
+$ sudo grep -E "DB loaded from append only file|Ready to accept" /var/log/redis/redis.log | tail -2
+4761:M 10 Nov 2026 13:22:39.401 * DB loaded from append only file: 0.001 seconds
+4761:M 10 Nov 2026 13:22:39.401 * Ready to accept connections tcp
+== 8. Mô phỏng sập đột ngột (kill -9) để kiểm tra AOF
+$ sudo kill -9 "$(pidof redis-server)"
+$ sleep 2; systemctl is-active redis || true
+failed
+$ redis-cli GET crash:test
+ghi truoc khi kill -9
+$ show_data | diff /tmp/aasc3-before.txt - && echo "=> Dữ liệu mẫu vẫn còn nguyên sau kill -9"
+=> Dữ liệu mẫu vẫn còn nguyên sau kill -9

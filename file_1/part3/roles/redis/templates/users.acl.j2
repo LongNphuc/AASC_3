@@ -1,0 +1,4 @@
+user default off
+{% for u in redis_acl_users %}
+user {{ u.name }} on #{{ u.password | hash('sha256') }} {{ u.rules }}
+{% endfor %}

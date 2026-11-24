@@ -1,0 +1,57 @@
+######## KẾT QUẢ 03-redis-acl | 2026-11-10 13:28:17 UTC ########
+# Máy: rocky-ctl | Rocky Linux release 9.8 (Blue Onyx) | kernel 5.14.0-687.66.1.el9_8.x86_64 | user rocky
+== 5. Lưu ACL ra file và xem nội dung (chỉ có mã băm, không có mật khẩu)
+$ sudo cat /etc/redis/users.acl
+user admin on sanitize-payload #76ff827cc4aa5a20ee3853dbd4a5ce93837d581b5cba0055834bdfe5b328dd26 ~* &* +@all
+user app on sanitize-payload #3580bba97c9b41acabf89f67710f74db7a7183c31ac86e8b8c39af373f0ad4ab ~* &* +@all -@dangerous -@scripting
+user default off sanitize-payload #d748a03c9a6f9904ff35f50c700bc297f265899b96919788e28511466d38289f ~* &* +@all
+user reader on sanitize-payload #3dabe0cc36c18d7cd687886e6b68cb690451b05dd20dbd848fb47871b0f7b6df ~* resetchannels -@all +@read +@connection -@dangerous +acl|whoami
+== 6. User reader: đọc được, mọi lệnh ghi và lệnh nguy hiểm bị chặn
+$ as_reader GET app:name
+AASC3 Redis demo
+$ as_reader SET app:name "bi sua"
+NOPERM User reader has no permissions to run the 'set' command
+
+$ as_reader DEL user:1001
+NOPERM User reader has no permissions to run the 'del' command
+
+$ as_reader FLUSHALL
+NOPERM User reader has no permissions to run the 'flushall' command
+
+$ as_reader KEYS "*"
+NOPERM User reader has no permissions to run the 'keys' command
+
+$ as_reader CONFIG GET maxmemory
+NOPERM User reader has no permissions to run the 'config|get' command
+
+$ as_reader GET app:name
+AASC3 Redis demo
+== 7. User app: ghi được, nhưng không chạy được FLUSHALL, CONFIG, KEYS, Lua
+$ as_app SET app:status ok
+OK
+$ as_app FLUSHALL
+NOPERM User app has no permissions to run the 'flushall' command
+
+$ as_app CONFIG SET maxmemory 1mb
+NOPERM User app has no permissions to run the 'config|set' command
+
+$ as_app EVAL "return 1" 0
+NOPERM User app has no permissions to run the 'eval' command
+
+== 8. Admin xem nhật ký các lần bị từ chối (ACL LOG)
+$ as_admin ACL LOG 6 | paste - - | grep -E "^(reason|object|username)" | paste - - - | column -t
+reason  command  object  eval        username  app
+reason  command  object  keys        username  app
+reason  command  object  config|set  username  app
+reason  command  object  flushall    username  app
+reason  command  object  config|get  username  reader
+reason  command  object  keys        username  reader
+== 9. Restart Redis: ACL được nạp lại từ file
+$ as_reader FLUSHALL
+NOPERM User reader has no permissions to run the 'flushall' command
+
+$ as_admin ACL USERS
+admin
+app
+default
+reader

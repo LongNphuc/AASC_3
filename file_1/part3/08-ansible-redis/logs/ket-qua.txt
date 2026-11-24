@@ -1,0 +1,42 @@
+######## KẾT QUẢ 08-ansible-redis | 2026-11-10 13:45:02 UTC ########
+# Máy: rocky-ctl | Rocky Linux release 9.8 (Blue Onyx) | kernel 5.14.0-687.66.1.el9_8.x86_64 | user rocky
+== 1. Cài Python 3.12 (AppStream) và ansible-core 2.21 trong virtualenv
+$ ansible --version
+ansible [core 2.21.6]
+  config file = /home/rocky/aasc3/part3/08-ansible-redis/ansible.cfg
+  configured module search path = ['/home/rocky/.ansible/plugins/modules', '/usr/share/ansible/plugins/modules']
+  ansible python module location = /opt/ansible-core-2.21/lib64/python3.12/site-packages/ansible
+  ansible collection location = /home/rocky/.ansible/collections:/usr/share/ansible/collections
+  executable location = /opt/ansible-core-2.21/bin/ansible
+  python version = 3.12.15 (main, Oct  1 2026, 00:00:00) [GCC 11.5.0 20240719 (Red Hat 11.5.0-14)] (/opt/ansible-core-2.21/bin/python3.12)
+  jinja version = 3.1.6
+  pyyaml version = 6.0.3 (with libyaml v0.2.5)
+== 4. Lần chạy 1: triển khai từ đầu
+$ grep -A1 "PLAY RECAP" logs/run1.txt | tail -1
+localhost                  : ok=15   changed=8    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+== 5. Kiểm tra Redis sau triển khai
+$ REDISCLI_AUTH=$(cat ~/.aasc3/redis-reader.pass) redis-cli --user reader SET x 1
+NOPERM User reader has no permissions to run the 'set' command
+
+== 6. Lần chạy 2: không thay đổi gì (idempotent, phải thấy changed=0)
+$ ansible-playbook playbook.yaml | tee logs/run2.txt | grep -A2 "PLAY RECAP"
+PLAY RECAP *********************************************************************
+localhost                  : ok=13   changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+
+$ grep -q "changed=0" logs/run2.txt && echo "=> ĐẠT: lần chạy 2 không thay đổi gì"
+=> ĐẠT: lần chạy 2 không thay đổi gì
+== 7. Cố ý sửa tay redis.conf (lệch cấu hình), chạy lại với --diff để Ansible sửa về đúng
+$ sudo grep "^maxmemory-policy" /etc/redis/redis.conf
+maxmemory-policy noeviction
+$ grep -E "^[-+]maxmemory-policy|^RUNNING HANDLER" logs/run3-drift.txt; grep -A1 "PLAY RECAP" logs/run3-drift.txt | tail -1
+-maxmemory-policy noeviction
++maxmemory-policy allkeys-lru
+RUNNING HANDLER [redis : Restart redis] ****************************************
+localhost                  : ok=14   changed=2    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+$ sudo grep "^maxmemory-policy" /etc/redis/redis.conf
+maxmemory-policy allkeys-lru
+== 8. Lần chạy 4 ở chế độ --check (chạy thử, không thay đổi gì)
+$ ansible-playbook playbook.yaml --check | tee logs/run4-check.txt | grep -A2 "PLAY RECAP"
+PLAY RECAP *********************************************************************
+localhost                  : ok=10   changed=0    unreachable=0    failed=0    skipped=3    rescued=0    ignored=0   
+

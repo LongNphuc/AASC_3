@@ -1,0 +1,27 @@
+---
+# Role python311: cài hoặc cập nhật Python 3.11 từ mã nguồn (make altinstall vào /usr/local).
+# Chỉ build khi phiên bản đang cài khác python311_version, nên chạy lại bao nhiêu lần cũng không đổi gì.
+python311_version: "3.11.18"
+# SHA-256 của file .tgz, lấy từ trang python.org/downloads/release/python-311XX/
+python311_sha256:
+  "3.11.17": 53cdee63ac4bf12387b7b33a53d3b1f8f4941cad73807a7b4fe91bb001ef004a
+  "3.11.18": 5f62711b12470fd435f83f1451c1b1ef4a179aebc715c716874b0967567d814e
+python311_prefix: /usr/local
+python311_build_dir: /usr/local/src
+# Production nên thêm --enable-optimizations --with-lto (build lâu hơn nhiều, Python nhanh hơn ~10-20%)
+python311_configure_args: "--prefix={{ python311_prefix }}"
+python311_build_deps:
+  - gcc
+  - make
+  - tar
+  - openssl-devel
+  - bzip2-devel
+  - libffi-devel
+  - zlib-devel
+  - xz-devel
+  - sqlite-devel
+  - readline-devel
+  - ncurses-devel
+  - gdbm-devel
+  - libuuid-devel
+  - tk-devel

@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# aasc: lệnh tắt cho Phần 3, chạy trên rocky-ctl.
+#   aasc 01 ... aasc 10   chạy bài tương ứng (log ghi vào logs/ của bài)
+#   aasc print-log 01     xóa màn hình rồi in trang kết quả của bài 01 (logs/ket-qua.txt)
+#   aasc                  danh sách bài và trạng thái
+set -uo pipefail
+BASE="$HOME/aasc3/part3"
+
+dir_of() {
+  [[ "$1" =~ ^[0-9]+$ ]] || return 1
+  ls -d "$BASE/$(printf '%02d' "$((10#$1))")-"*/ 2>/dev/null | head -1
+}
+
+print_log() {
+  local d f
+  d=$(dir_of "$1") || true
+  [ -n "${d:-}" ] || { echo "Không có bài '$1'"; return 1; }
+  f="${d}logs/ket-qua.txt"
+  [ -f "$f" ] || { echo "Bài $1 chưa có kết quả. Chạy: aasc $1"; return 1; }
+  clear
+  cat "$f"
+}
+
+list() {
+  echo "Cách dùng: aasc 01 ... aasc 10  (chạy bài)  |  aasc print-log 01  (in trang kết quả)"
+  for d in "$BASE"/[0-9][0-9]-*/; do
+    local name status
+    name=$(basename "$d")
+    if [ -f "$d/logs/ket-qua.txt" ]; then status="đã chạy $(date -r "$d/logs/ket-qua.txt" '+%H:%M %d/%m')"; else status="chưa chạy"; fi
+    printf '  %-24s %s\n' "$name" "$status"
+  done
+}
+
+case "${1:-}" in
+  "") list ;;
+  print-log) print_log "${2:?Thiếu số bài, ví dụ: aasc print-log 01}" ;;
+  *)
+    d=$(dir_of "$1") || true
+    [ -n "${d:-}" ] || { echo "Không có bài '$1'"; list; exit 1; }
+    echo ">>> Chạy $(basename "$d")"
+    (cd "$d" && ./run.sh)
+    rc=$?
+    if [ $rc -ne 0 ]; then
+      echo; echo "!!! Bài $1 dừng vì lỗi (mã $rc). Dán đoạn lỗi phía trên cho Claude, đừng chạy bài tiếp theo."
+      exit $rc
+    fi
+    echo; echo "Bài $1 xong. In trang kết quả: aasc print-log $1"
+    ;;
+esac

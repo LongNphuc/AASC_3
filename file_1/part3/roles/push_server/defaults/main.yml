@@ -1,0 +1,11 @@
+---
+# Role push_server: triển khai push-server mô phỏng Bitrix24 (2 tiến trình systemd: push-server@sub, push-server@pub).
+push_server_dir: /opt/push-server
+push_server_user: pushsrv
+push_server_app_src: "{{ playbook_dir }}/app/"
+push_server_files:
+  - push-server.js
+  - package.json
+  - package-lock.json
+# Bắt buộc truyền từ playbook/group_vars (không đặt mặc định cho bí mật):
+# push_server_redis_url, push_server_redis_user, push_server_redis_password, push_server_security_key

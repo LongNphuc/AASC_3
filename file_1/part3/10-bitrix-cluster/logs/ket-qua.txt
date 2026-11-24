@@ -1,0 +1,61 @@
+######## KẾT QUẢ 10-bitrix-cluster | 2026-11-10 13:59:03 UTC ########
+# Máy: rocky-ctl | Rocky Linux release 9.8 (Blue Onyx) | kernel 5.14.0-687.66.1.el9_8.x86_64 | user rocky
+== 1. Inventory và kết nối tới các máy
+$ ansible all -m ansible.builtin.ping | grep -E "\| (SUCCESS|UNREACHABLE|FAILED)"
+rocky-ctl | SUCCESS => {
+rocky-node1 | SUCCESS => {
+rocky-node2 | SUCCESS => {
+== 2. Lần chạy 1: dựng toàn bộ cụm
+$ grep -A4 "PLAY RECAP" logs/run1.txt | grep -E "^rocky"
+rocky-ctl                  : ok=11   changed=2    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+rocky-node1                : ok=17   changed=9    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+rocky-node2                : ok=17   changed=9    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+== 3. Lần chạy 2: không thay đổi gì (idempotent)
+$ ansible-playbook site.yml | tee logs/run2.txt | grep -A4 "PLAY RECAP"
+PLAY RECAP *********************************************************************
+rocky-ctl                  : ok=10   changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+rocky-node1                : ok=15   changed=0    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+rocky-node2                : ok=15   changed=0    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+
+$ grep -E "^(rocky-ctl|rocky-node)" logs/run2.txt | grep -v "changed=0" || echo "=> ĐẠT: mọi máy đều changed=0"
+=> ĐẠT: mọi máy đều changed=0
+== 4. Trạng thái dịch vụ trên các node và Redis
+$ REDISCLI_AUTH=$(cat ~/.aasc3/redis-admin.pass) redis-cli --user admin CLIENT LIST | awk '/user=pushserver/ { for (i = 1; i <= NF; i++) if ($i ~ /^(addr|cmd|user)=/) printf "%s ", $i; print "" }'
+addr=172.31.0.58:37394 cmd=psubscribe user=pushserver 
+addr=172.31.0.58:37400 cmd=NULL user=pushserver 
+addr=172.31.7.127:44446 cmd=psubscribe user=pushserver 
+addr=172.31.7.127:45250 cmd=NULL user=pushserver 
+== 5. Kiểm thử tích hợp: 200 client chia đều 2 node, backend gửi 10 tin xoay vòng qua pub của 2 node
+$ while kill -0 "$(cat /tmp/cluster-test.pid)" 2>/dev/null; do sleep 0.5; done; sed "1,2d" /tmp/cluster-test.out
+Số lượt nhận theo đường đi (client nối vào node nào <- tin vào qua pub của node nào):
+  client@rocky-node1 <- pub@rocky-node1    500
+  client@rocky-node1 <- pub@rocky-node2    500
+  client@rocky-node2 <- pub@rocky-node1    500
+  client@rocky-node2 <- pub@rocky-node2    500
+Client nhận đủ 10/10 tin: 200/200
+=> ĐẠT: tin đi qua bất kỳ node nào cũng tới mọi client trên mọi node
+== 6. Bảo mật: tin gửi với chữ ký sai bị push-server từ chối (HTTP 403)
+$ PUSH_SECURITY_KEY=$(cat ~/.aasc3/push-security.key) /home/rocky/py311-venv/bin/python backend/backend.py --pub http://172.31.0.58:9010,http://172.31.7.127:9010 --bad-signature
+Python 3.11.18 | requests 2.34.2 | kênh chat.general
+Gửi tin với chữ ký sai -> HTTP 403 {'error': 'invalid signature'}
+== 8. Chịu lỗi: tắt tiến trình sub của node2, client trên node1 vẫn nhận tin gửi qua pub của node2
+$ ansible rocky-node2 -b -m ansible.builtin.command -a "systemctl stop push-server@sub"
+rocky-node2 | CHANGED | rc=0 >>
+
+$ ansible rocky-node2 -b -m ansible.builtin.shell -a "systemctl is-active push-server@sub || true"
+rocky-node2 | CHANGED | rc=0 >>
+inactive
+$ while kill -0 "$(cat /tmp/cluster-test2.pid)" 2>/dev/null; do sleep 0.5; done; cat /tmp/cluster-test2.out
+Đã kết nối 50 client vào kênh chat.general: {"rocky-node1":50}
+READY
+Số lượt nhận theo đường đi (client nối vào node nào <- tin vào qua pub của node nào):
+  client@rocky-node1 <- pub@rocky-node2    250
+Client nhận đủ 5/5 tin: 50/50
+=> ĐẠT: tin đi qua bất kỳ node nào cũng tới mọi client trên mọi node
+$ ansible-playbook site.yml --limit rocky-node2 | grep -A2 "PLAY RECAP"
+PLAY RECAP *********************************************************************
+rocky-node2                : ok=15   changed=1    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+
+$ ansible rocky-node2 -b -m ansible.builtin.command -a "systemctl is-active push-server@sub"
+rocky-node2 | CHANGED | rc=0 >>
+active

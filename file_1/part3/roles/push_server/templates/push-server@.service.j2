@@ -1,0 +1,24 @@
+# {{ ansible_managed }}
+[Unit]
+Description=AASC3 push-server (%i) - mô phỏng push-server Bitrix24
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ push_server_user }}
+Group={{ push_server_user }}
+WorkingDirectory={{ push_server_dir }}
+EnvironmentFile={{ push_server_dir }}/push-server.env
+Environment=PUSH_ROLE=%i
+ExecStart=/usr/bin/node {{ push_server_dir }}/push-server.js
+Restart=on-failure
+RestartSec=2
+LimitNOFILE=65535
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

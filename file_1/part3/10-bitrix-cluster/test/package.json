@@ -1,0 +1,9 @@
+{
+  "name": "aasc3-cluster-test",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Bài 10: client kiểm thử cụm push-server",
+  "dependencies": {
+    "ws": "8.22.1"
+  }
+}

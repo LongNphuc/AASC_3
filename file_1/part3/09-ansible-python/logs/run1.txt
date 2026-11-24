@@ -1,0 +1,107 @@
+
+PLAY [Cập nhật Python 3.11 lên bản bảo trì mới nhất] ***************************
+
+TASK [Gathering Facts] *********************************************************
+Tuesday 10 November 2026  13:48:46 +0000 (0:00:00.016)       0:00:00.016 ****** 
+ok: [localhost]
+
+TASK [python311 : Đọc phiên bản python3.11 đang cài] ***************************
+Tuesday 10 November 2026  13:48:47 +0000 (0:00:01.109)       0:00:01.125 ****** 
+ok: [localhost]
+
+TASK [python311 : Ghi nhận phiên bản hiện tại] *********************************
+Tuesday 10 November 2026  13:48:48 +0000 (0:00:00.437)       0:00:01.563 ****** 
+ok: [localhost]
+
+TASK [python311 : So sánh với phiên bản mục tiêu] ******************************
+Tuesday 10 November 2026  13:48:48 +0000 (0:00:00.025)       0:00:01.589 ****** 
+ok: [localhost] => {
+    "msg": "python3.11 đang cài: 3.11.17 | mục tiêu: 3.11.18 | cần build: True"
+}
+
+TASK [python311 : Cài công cụ build và thư viện -devel (gdbm-devel ở kho CRB)] ***
+Tuesday 10 November 2026  13:48:48 +0000 (0:00:00.027)       0:00:01.616 ****** 
+ok: [localhost]
+
+TASK [python311 : Tải mã nguồn và kiểm tra SHA-256] ****************************
+Tuesday 10 November 2026  13:48:50 +0000 (0:00:01.609)       0:00:03.225 ****** 
+changed: [localhost]
+
+TASK [python311 : Giải nén mã nguồn] *******************************************
+Tuesday 10 November 2026  13:48:50 +0000 (0:00:00.827)       0:00:04.053 ****** 
+changed: [localhost]
+
+TASK [python311 : configure] ***************************************************
+Tuesday 10 November 2026  13:48:55 +0000 (0:00:04.850)       0:00:08.903 ****** 
+changed: [localhost]
+
+TASK [python311 : make (chạy nền, kiểm tra mỗi 15 giây, tối đa 1 giờ)] *********
+Tuesday 10 November 2026  13:49:24 +0000 (0:00:28.840)       0:00:37.743 ****** 
+ASYNC POLL on localhost: jid=j328549108397.32780 started=True finished=False
+ASYNC POLL on localhost: jid=j328549108397.32780 started=True finished=False
+ASYNC POLL on localhost: jid=j328549108397.32780 started=True finished=False
+ASYNC POLL on localhost: jid=j328549108397.32780 started=True finished=False
+ASYNC POLL on localhost: jid=j328549108397.32780 started=True finished=False
+ASYNC POLL on localhost: jid=j328549108397.32780 started=True finished=False
+ASYNC POLL on localhost: jid=j328549108397.32780 started=True finished=False
+ASYNC POLL on localhost: jid=j328549108397.32780 started=True finished=False
+ASYNC POLL on localhost: jid=j328549108397.32780 started=True finished=False
+ASYNC POLL on localhost: jid=j328549108397.32780 started=True finished=False
+ASYNC OK on localhost: jid=j328549108397.32780
+changed: [localhost]
+
+TASK [python311 : make altinstall (không ghi đè python3 của hệ thống)] *********
+Tuesday 10 November 2026  13:52:15 +0000 (0:02:50.827)       0:03:28.571 ****** 
+changed: [localhost]
+
+TASK [python311 : Dọn thư mục build] *******************************************
+Tuesday 10 November 2026  13:53:15 +0000 (0:00:59.803)       0:04:28.374 ****** 
+changed: [localhost] => (item=/usr/local/src/Python-3.11.18)
+changed: [localhost] => (item=/usr/local/src/Python-3.11.18.tgz)
+
+TASK [python311 : Kiểm tra lại phiên bản sau khi chạy role] ********************
+Tuesday 10 November 2026  13:53:16 +0000 (0:00:00.881)       0:04:29.255 ****** 
+ok: [localhost]
+
+TASK [python311 : Xác nhận đúng phiên bản mục tiêu] ****************************
+Tuesday 10 November 2026  13:53:16 +0000 (0:00:00.379)       0:04:29.635 ****** 
+ok: [localhost] => {
+    "changed": false,
+    "msg": "python3.11 = 3.11.18 OpenSSL 3.5.8 25 Aug 2026"
+}
+
+TASK [Virtualenv tạo từ trước (Bài 4) vẫn chạy được với bản vá mới] ************
+Tuesday 10 November 2026  13:53:16 +0000 (0:00:00.034)       0:04:29.670 ****** 
+ok: [localhost]
+
+TASK [Kết quả] *****************************************************************
+Tuesday 10 November 2026  13:53:16 +0000 (0:00:00.495)       0:04:30.165 ****** 
+ok: [localhost] => {
+    "msg": [
+        "python3.11 hệ thống: 3.11.18 OpenSSL 3.5.8 25 Aug 2026",
+        "venv ~/py311-venv: 3.11.18 requests 2.34.2"
+    ]
+}
+
+PLAY RECAP *********************************************************************
+localhost                  : ok=15   changed=6    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+
+
+TASKS RECAP ********************************************************************
+Tuesday 10 November 2026  13:53:17 +0000 (0:00:00.034)       0:04:30.200 ****** 
+=============================================================================== 
+python311 : make (chạy nền, kiểm tra mỗi 15 giây, tối đa 1 giờ) ------- 170.83s
+python311 : make altinstall (không ghi đè python3 của hệ thống) -------- 59.80s
+python311 : configure -------------------------------------------------- 28.84s
+python311 : Giải nén mã nguồn ------------------------------------------- 4.85s
+python311 : Cài công cụ build và thư viện -devel (gdbm-devel ở kho CRB) --- 1.61s
+Gathering Facts --------------------------------------------------------- 1.11s
+python311 : Dọn thư mục build ------------------------------------------- 0.88s
+python311 : Tải mã nguồn và kiểm tra SHA-256 ---------------------------- 0.83s
+Virtualenv tạo từ trước (Bài 4) vẫn chạy được với bản vá mới ------------ 0.50s
+python311 : Đọc phiên bản python3.11 đang cài --------------------------- 0.44s
+python311 : Kiểm tra lại phiên bản sau khi chạy role -------------------- 0.38s
+python311 : Xác nhận đúng phiên bản mục tiêu ---------------------------- 0.03s
+Kết quả ----------------------------------------------------------------- 0.03s
+python311 : So sánh với phiên bản mục tiêu ------------------------------ 0.03s
+python311 : Ghi nhận phiên bản hiện tại --------------------------------- 0.03s
